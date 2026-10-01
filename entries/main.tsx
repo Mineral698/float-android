@@ -1,0 +1,25 @@
+// 主入口（原 app/layout.tsx + app/page.tsx 的合并）。
+// 纯浏览器渲染，无 SSR——Vite 多页构建的 / 页面。
+
+import { createRoot } from "react-dom/client";
+
+import { installWriteFlushListeners } from "@/lib/pending-writes";
+import { ChatPluginBootstrap } from "@/components/chat-plugin-bootstrap";
+import { ChatReasoningVisibilityController } from "@/components/chat-reasoning-visibility-controller";
+import { PWAManifestInjector } from "@/components/pwa-manifest-injector";
+import { MainApp } from "@/components/main-app";
+
+import "../styles/fonts.css";
+import "../app/globals.css";
+
+// 页面隐藏/被杀前把在途 IndexedDB 写事务排空（缩掉丢数据窗口）
+installWriteFlushListeners();
+
+createRoot(document.getElementById("root")!).render(
+    <>
+        <PWAManifestInjector />
+        <ChatPluginBootstrap />
+        <ChatReasoningVisibilityController />
+        <MainApp />
+    </>,
+);
