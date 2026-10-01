@@ -19,6 +19,8 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(NativeMediaPlugin.class);
         // 公共 Documents 写入权限桥：MANAGE_EXTERNAL_STORAGE 只能弹设置页引导
         registerPlugin(StorageAccessPlugin.class);
+        // 应用自更新：GitHub Release APK 原生下载（断点续传）+ 拉起系统安装器
+        registerPlugin(AppUpdaterPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }

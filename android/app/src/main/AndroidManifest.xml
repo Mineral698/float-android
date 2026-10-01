@@ -58,6 +58,8 @@
          运行时权限拿不到，由 StorageAccessPlugin 弹系统设置页引导用户开启。
          备份/导出依赖它；声明本身只让设置页列出本应用，授予与否用户说了算。 -->
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+    <!-- 检查更新下载 APK 后拉起系统安装器 -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!-- 声明但不强制，避免无相机/麦克风设备被商店过滤 -->
     <uses-feature android:name="android.hardware.camera" android:required="false" />

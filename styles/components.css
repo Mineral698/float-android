@@ -6071,3 +6071,194 @@
   gap: 6px;
   padding: 0 10px 8px;
 }
+
+/* ── 关于页 / 应用更新 ── */
+
+.about-app-card {
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+}
+.about-app-icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  flex-shrink: 0;
+}
+.about-license-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: calc(11px * var(--app-text-scale, 1));
+  font-weight: 600;
+  background: rgba(120, 140, 170, 0.12);
+  color: var(--c-text);
+}
+.about-license-pill:active { opacity: 0.7; }
+
+.about-gh-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+.about-gh-row:active { opacity: 0.7; }
+
+.about-update-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.about-check-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: calc(12px * var(--app-text-scale, 1));
+  padding: 8px 14px;
+  border-radius: 999px;
+}
+
+.about-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: calc(12px * var(--app-text-scale, 1));
+  line-height: 1.4;
+}
+.about-notice-ok {
+  background: rgba(93, 168, 122, 0.12);
+  color: var(--c-icon-green, #5DA87A);
+}
+.about-notice-error {
+  background: rgba(200, 80, 80, 0.10);
+  color: #c05050;
+}
+
+.about-update-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(120, 140, 170, 0.08);
+}
+.about-update-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.about-update-tag {
+  font-size: calc(15px * var(--app-text-scale, 1));
+  font-weight: 700;
+  color: var(--c-text-title);
+}
+.about-update-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: calc(11.5px * var(--app-text-scale, 1));
+  color: var(--c-text-muted, var(--c-icon));
+  min-width: 0;
+}
+.about-update-notes {
+  margin: 0;
+  font-size: calc(12px * var(--app-text-scale, 1));
+  line-height: 1.55;
+  color: var(--c-text);
+  white-space: pre-wrap;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.about-download-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  border-radius: 10px;
+  font-size: calc(13px * var(--app-text-scale, 1));
+}
+
+.about-dl { display: flex; flex-direction: column; gap: 8px; }
+.about-dl-track {
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(120, 140, 170, 0.18);
+  overflow: hidden;
+}
+.about-dl-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--c-icon-active);
+  transition: width 0.3s ease;
+}
+.about-dl-fill-paused {
+  background: var(--c-warning);
+}
+.about-dl-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: calc(11.5px * var(--app-text-scale, 1));
+  color: var(--c-text-muted, var(--c-icon));
+}
+.about-dl-actions {
+  display: flex;
+  gap: 8px;
+}
+.about-dl-btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border-radius: 10px;
+  font-size: calc(12.5px * var(--app-text-scale, 1));
+  padding: 9px 12px;
+}
+
+.about-history {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+.about-release-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 4px;
+  border-radius: 8px;
+}
+.about-release-row + .about-release-row {
+  border-top: 1px solid rgba(128, 128, 128, 0.08);
+}
+.about-release-dl {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  flex-shrink: 0;
+  background: rgba(120, 140, 170, 0.12);
+  color: var(--c-text);
+}
+.about-release-dl:active { opacity: 0.7; }
