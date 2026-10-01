@@ -6,6 +6,16 @@
 
 本仓库是它的 Android / 独立维护分支，基于 Capacitor 打包成可直接安装的 APK。
 
+## 截图
+
+| 桌面 | 小组件 | 会话列表 | 聊天 |
+|---|---|---|---|
+| ![](docs/screenshots/01-desktop.png) | ![](docs/screenshots/02-widgets.png) | ![](docs/screenshots/03-chats.png) | ![](docs/screenshots/04-chat-room.png) |
+
+| 角色卷宗 | 查找·地图 | 外观自定义 | API 设置 |
+|---|---|---|---|
+| ![](docs/screenshots/05-characters.png) | ![](docs/screenshots/06-find-my.png) | ![](docs/screenshots/07-appearance.png) | ![](docs/screenshots/08-api-settings.png) |
+
 ## 为什么好用
 
 - **装完就能玩**。没有注册、没有激活码、没有 Supabase 要配。安装 APK → 设置里填一个 LLM 的 Base URL + Key → 建角色 → 开聊。从装包到第一句话只要两分钟。
