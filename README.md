@@ -64,8 +64,6 @@
 
 ## 怎么使用
 
-### 方式一：直接装 APK（推荐）
-
 1. 下载 Release 里的 APK 安装到 Android 手机；
 2. 打开 App → **设置 → API 设置**，填 LLM 的 Base URL + API Key（支持任意 OpenAI 兼容接口、Anthropic、Google Gemini）；
 3. 创建或导入角色卡，开始聊天；
@@ -73,22 +71,7 @@
 
 首次导出聊天记录时，系统会请求「所有文件访问」权限——授予后导出和每 6 小时的自动备份都会写入公共 Documents 目录。
 
-### 方式二：浏览器里跑
-
-```bash
-npm install
-npm run dev        # http://localhost:3001
-```
-
-### 自己构建 APK
-
-```bash
-npm install
-npm run build:apk                      # vite build → out/ → cap sync android
-cd android && ./gradlew assembleDebug  # 或 assembleRelease
-```
-
-需要本机有 JDK 17+ 和 Android SDK（`android/local.properties` 里写 `sdk.dir`）。
+想自己打包：`npm run build:apk` 同步到 Android 工程，`cd android && ./gradlew assembleRelease`（需要 JDK 17+ 和 Android SDK）。
 
 ## 技术实现
 
