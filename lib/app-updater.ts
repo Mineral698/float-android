@@ -15,7 +15,7 @@ export const LICENSE_NAME = "AGPL-3.0-only";
 
 const RELEASES_API = "https://api.github.com/repos/shiaho777/float-android/releases";
 const STORAGE_KEY = "float_update_dl_v1";
-const FALLBACK_VERSION = "1.0.0";
+const FALLBACK_VERSION = "1.0.1";
 
 export interface ReleaseInfo {
     tag: string;
