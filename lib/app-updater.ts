@@ -54,8 +54,9 @@ interface AppUpdaterNative {
 
 const Updater = registerPlugin<AppUpdaterNative>("AppUpdater");
 
-export function isNativePlatform(): boolean {
-    return Capacitor.isNativePlatform();
+/** 自更新仅 Android：Apple 禁止应用内下载安装二进制（Guideline 2.5.2），iOS 走 App Store。 */
+export function isAndroidPlatform(): boolean {
+    return Capacitor.getPlatform() === "android";
 }
 
 function normalizeVersion(v: string): number[] {
@@ -152,7 +153,7 @@ function persistResumable() {
 }
 
 async function bindNativeListeners() {
-    if (nativeListenersBound || !isNativePlatform()) return;
+    if (nativeListenersBound || !isAndroidPlatform()) return;
     nativeListenersBound = true;
     await Updater.addListener("updateProgress", d => {
         // 暂停瞬间桥上可能有在途进度事件——非 downloading 状态一律丢弃，
@@ -178,7 +179,7 @@ async function bindNativeListeners() {
 }
 
 export async function startDownload(rel: ReleaseInfo): Promise<void> {
-    if (!isNativePlatform()) {
+    if (!isAndroidPlatform()) {
         const { openExternalUrl } = await import("./download-utils");
         openExternalUrl(rel.downloadUrl);
         return;
@@ -195,14 +196,14 @@ export async function startDownload(rel: ReleaseInfo): Promise<void> {
 }
 
 export async function pauseDownload(): Promise<void> {
-    if (!isNativePlatform() || state.phase !== "downloading") return;
+    if (!isAndroidPlatform() || state.phase !== "downloading") return;
     try { await Updater.pause(); } catch { /* noop */ }
     set({ phase: "paused", speedBps: 0 });
     persistResumable();
 }
 
 export async function resumeDownload(): Promise<void> {
-    if (!isNativePlatform() || state.phase !== "paused") return;
+    if (!isAndroidPlatform() || state.phase !== "paused") return;
     await bindNativeListeners();
     set({ phase: "downloading", speedBps: 0 });
     try {
@@ -213,7 +214,7 @@ export async function resumeDownload(): Promise<void> {
 }
 
 export async function cancelDownload(): Promise<void> {
-    if (isNativePlatform() && state.fileName) {
+    if (isAndroidPlatform() && state.fileName) {
         try { await Updater.cancel({ fileName: state.fileName }); } catch { /* noop */ }
     }
     set({ ...initial });
@@ -221,7 +222,7 @@ export async function cancelDownload(): Promise<void> {
 }
 
 export async function installDownloaded(): Promise<void> {
-    if (!isNativePlatform() || state.phase !== "done") return;
+    if (!isAndroidPlatform() || state.phase !== "done") return;
     await Updater.install({ fileName: state.fileName });
 }
 
@@ -230,7 +231,7 @@ export async function installDownloaded(): Promise<void> {
  * 置为 paused，UI 显示「继续下载」。文件被系统清了则丢弃记录。
  */
 export async function restoreResumable(): Promise<void> {
-    if (state.phase !== "idle" || !isNativePlatform()) return;
+    if (state.phase !== "idle" || !isAndroidPlatform()) return;
     let saved: { tag?: string; fileName?: string; url?: string; received?: number; total?: number } | null = null;
     try {
         const raw = localStorage.getItem(STORAGE_KEY);

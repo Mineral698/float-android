@@ -155,7 +155,8 @@ type PendingRequest = {
     onAbort: (() => void) | null;
 };
 
-const plugin: NativeHttpPluginDef | null = Capacitor.isNativePlatform()
+// 仅 Android 有原生实现；iOS/Web 走 fetch 兜底
+const plugin: NativeHttpPluginDef | null = Capacitor.getPlatform() === "android"
     ? registerPlugin<NativeHttpPluginDef>("NativeHttp")
     : null;
 

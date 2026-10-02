@@ -13,7 +13,8 @@ type MediaPermissionsPlugin = {
 const MediaPermissions = registerPlugin<MediaPermissionsPlugin>("MediaPermissions");
 
 async function ensure(kind: "microphone" | "camera" | "av"): Promise<boolean> {
-    if (!Capacitor.isNativePlatform()) return true;
+    // iOS 权限由 Info.plist usage description + WKWebView getUserMedia 系统弹窗处理
+    if (Capacitor.getPlatform() !== "android") return true;
     try {
         const res = kind === "microphone" ? await MediaPermissions.ensureMicrophone()
             : kind === "camera" ? await MediaPermissions.ensureCamera()

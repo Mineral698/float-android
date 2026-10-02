@@ -15,7 +15,8 @@ type GenerationKeepAlivePlugin = {
     stop(): Promise<void>;
 };
 
-const plugin: GenerationKeepAlivePlugin | null = Capacitor.isNativePlatform()
+// 仅 Android 有原生实现；iOS 无前台服务等价物，降级为 no-op
+const plugin: GenerationKeepAlivePlugin | null = Capacitor.getPlatform() === "android"
     ? registerPlugin<GenerationKeepAlivePlugin>("GenerationKeepAlive")
     : null;
 
