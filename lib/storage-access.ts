@@ -14,7 +14,8 @@ const StorageAccess = registerPlugin<StorageAccessPlugin>("StorageAccess");
 
 /** 是否已能写公共 Documents。检测失败按放行处理（让实际写操作自己报错）。 */
 export async function hasPublicDocumentsAccess(): Promise<boolean> {
-    if (!Capacitor.isNativePlatform()) return true;
+    // MANAGE_EXTERNAL_STORAGE 是 Android 独有概念；iOS/Web 无需此权限
+    if (Capacitor.getPlatform() !== "android") return true;
     try {
         return (await StorageAccess.checkManageAccess()).granted === true;
     } catch {
@@ -24,7 +25,7 @@ export async function hasPublicDocumentsAccess(): Promise<boolean> {
 
 /** 拉起系统「所有文件访问」设置页。返回调用当下的授权状态（刚弹窗多半还是 false）。 */
 export async function requestDocumentsAccess(): Promise<boolean> {
-    if (!Capacitor.isNativePlatform()) return true;
+    if (Capacitor.getPlatform() !== "android") return true;
     try {
         return (await StorageAccess.requestManageAccess()).granted === true;
     } catch {

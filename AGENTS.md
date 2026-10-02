@@ -18,6 +18,7 @@ Instructions for coding agents working in this repository.
 | `lib/` | Business logic layer (~268 modules): Dexie/IndexedDB stores, LLM adapter, prompt assembler, engines (chat/group-chat/memory/presence/dwelling/checkphone), importer, backup. |
 | `styles/components.css` | Single design-token CSS file shared by all components (`dl-*`, `ap-*`, `fi-*`, `cp-*` families). Reuse existing classes before inventing new ones. |
 | `android/` | Capacitor Android project. Native plugins/services live in `android/app/src/main/java/app/floatphone/app/`. |
+| `ios/` | Capacitor iOS project (Xcode). No custom native plugins yet — Android-only plugins degrade via the `lib/` wrapper fallbacks (see the dual-platform contract). |
 | `custom-apps/` | Built-in user apps installed through the Custom App SDK. |
 | `app-store-apps/` | Extra apps for the in-app market. |
 | `world-builder/` | 3D world builder page (React Three Fiber). |
@@ -57,6 +58,45 @@ Mental model:
 - **Version alignment:** `package.json` version, `android/app/build.gradle` `versionName`, and the release tag must agree (`1.0.0` ↔ `v1.0.0`). The updater compares `versionName` against tag names.
 - Avoid new third-party dependencies unless strongly justified; prefer existing modules in `lib/` and platform APIs.
 
+## Dual-platform contract (Android + iOS)
+
+The web core (`components/`, `lib/`, `entries/`, `styles/`) is shared and must stay **platform-agnostic**; `android/` and `ios/` are thin native shells that `npx cap sync` feeds the same `out/` build into. Features land for both platforms in one change — never ship an update that only accounts for one platform.
+
+**Rules:**
+
+1. **Every capability must have defined behavior on both platforms** — either a real implementation or a deliberate, documented graceful degradation. "Silently does nothing" or "throws `not implemented`" is not a degradation path.
+2. **Platform gates live inside the `lib/` wrapper modules** (`native-http`, `native-media`, `keep-alive`, `storage-access`, `media-permissions`, `app-updater`). Callers stay platform-agnostic; never scatter `getPlatform()` checks through business code, and never call an Android-only plugin unguarded.
+3. **Gate with `Capacitor.getPlatform()`, never `Capacitor.isNativePlatform()`** — iOS is also "native", so `isNativePlatform()` is always wrong as an Android check. On iOS an unregistered plugin returns a proxy whose calls reject with "not implemented"; the correct pattern is `getPlatform() === "android"` so iOS falls through to the wrapper's web fallback.
+4. **When you touch a plugin contract, update the matrix below** and state the iOS behavior in the PR.
+
+**Capability matrix:**
+
+| Wrapper / plugin | Android | iOS |
+|---|---|---|
+| `native-http` (`NativeHttp`) | OkHttp SSE streaming | `fetch` fallback |
+| `native-media` (`NativeMedia`) | Native disk store, `media-store://` refs | IndexedDB blob fallback |
+| `keep-alive` (`GenerationKeepAlive`) | Foreground service + WakeLock | No-op — iOS suspends background tasks; generation requires the app in the foreground |
+| `storage-access` (`StorageAccess`) | MANAGE_EXTERNAL_STORAGE → public Documents | Always "granted"; exports live in the app sandbox / share sheet |
+| `media-permissions` (`MediaPermissions`) | Runtime permission prompts | Always "granted"; iOS prompts are driven by `Info.plist` usage descriptions + WKWebView getUserMedia |
+| `app-updater` (`AppUpdater`) | Check/download/install GitHub APK | **Removed** — Apple 2.5.2 forbids in-app binary install; updates ship via App Store/TestFlight |
+
+**iOS hard constraints:**
+
+- No in-app self-update or binary download/install — the About page gates the whole update center to Android (`isAndroidPlatform()`).
+- No reliable background execution — keep-alive degrade path is "generation pauses while backgrounded"; do not fake it with silent audio or other review-bait hacks.
+- HTTP endpoints: `NSAppTransportSecurity/NSAllowsArbitraryLoads` is set in `ios/App/App/Info.plist` because users configure arbitrary `http://` LLM endpoints (e.g. LAN Ollama).
+- WKWebView IndexedDB is evictable under storage pressure — iOS exports/backups are more important, not less. Keep export paths working there.
+- Permission prompts come from `Info.plist` usage-description strings (microphone/camera/photo library) — add one when introducing a new protected API.
+
+**Backward compatibility (every update must honor):**
+
+- Dexie schema changes go through `version(n).stores(...)` upgrades — never leave data written by an older release unreadable.
+- New `localStorage`/settings keys ship with defaults; importing a backup from an older version must not break.
+- Export format changes must keep older exports importable (or provide migration on import).
+- Native plugin interface changes keep old call sites working or gate by availability — an APK built on an older web bundle must not crash on a newer native shell, and vice versa.
+
+**Verification:** for changes that touch native code or the wrappers, verify on both platforms — minimum `npx tsc --noEmit` + `npm run build` + `npx cap sync` for `android` and `ios`, plus an honest note in the PR about which platform was device-tested.
+
 ## Workflow
 
 - Do not commit secrets, `local.properties`, `android/keystore.properties`, keystores (`*.keystore`), or IDE/cache junk. Signing material is gitignored — keep it that way.
@@ -85,3 +125,5 @@ Releases are GitHub Releases built from `main`:
 4. To re-spin the same version (hot-fixing a just-published release), delete and recreate the release+tag at the new commit rather than pushing a moved tag silently: `gh release delete vX.Y.Z --cleanup-tag` then the same `gh release create` line.
 
 The in-app updater (设置 → 关于与声明) lists these releases and downloads the first `*.apk` asset — keep exactly one APK asset per release.
+
+iOS distribution is separate: Xcode Archive → TestFlight → App Store. There is no in-app updater on iOS (Apple Guideline 2.5.2); the About page hides the update center there. Keep `ios/` version (`MARKETING_VERSION`/`CURRENT_PROJECT_VERSION`) in step with the same `X.Y.Z` bump when shipping.

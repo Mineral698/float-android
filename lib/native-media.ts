@@ -14,7 +14,8 @@ type NativeMediaPluginDef = {
     clear(): Promise<{ removed: number }>;
 };
 
-const plugin: NativeMediaPluginDef | null = Capacitor.isNativePlatform()
+// 仅 Android 有原生实现；iOS/Web 回落 IndexedDB blob
+const plugin: NativeMediaPluginDef | null = Capacitor.getPlatform() === "android"
     ? registerPlugin<NativeMediaPluginDef>("NativeMedia")
     : null;
 

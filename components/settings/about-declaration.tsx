@@ -9,7 +9,7 @@ import { openExternalUrl } from "@/lib/download-utils";
 import {
     REPO_URL, LICENSE_URL, LICENSE_NAME,
     fetchReleases, getCurrentVersion, compareVersions, formatBytes, formatSpeed,
-    subscribeDownload, restoreResumable, isNativePlatform,
+    subscribeDownload, restoreResumable, isAndroidPlatform,
     startDownload, pauseDownload, resumeDownload, cancelDownload, installDownloaded,
     type ReleaseInfo, type DownloadState,
 } from "@/lib/app-updater";
@@ -81,6 +81,8 @@ export function AboutDeclaration() {
                     </div>
                     <ExternalLink size={15} className="shrink-0 text-[var(--c-icon)]" />
                 </button>
+                {/* 自更新仅 Android；iOS 由 App Store 托管（Guideline 2.5.2 禁止应用内下载安装） */}
+                {isAndroidPlatform() && (<>
                 <div className="ui-row-divider !mx-0" />
                 <div className="about-update-row">
                     <div className="flex flex-col flex-1 min-w-0">
@@ -137,7 +139,7 @@ export function AboutDeclaration() {
                                 onClick={() => void startDownload(latest)}
                             >
                                 <Download size={15} />
-                                {isNativePlatform() ? "下载更新" : "前往下载"}
+                                {isAndroidPlatform() ? "下载更新" : "前往下载"}
                             </button>
                         )}
                     </div>
@@ -197,9 +199,11 @@ export function AboutDeclaration() {
                         )}
                     </div>
                 )}
+                </>)}
             </div>
 
-            {/* ── 历史版本 ── */}
+            {/* ── 历史版本（仅 Android 提供 APK 下载）── */}
+            {isAndroidPlatform() && (
             <div className="g-card">
                 <button className="about-gh-row" onClick={async () => {
                     if (!releases && !checking) void runCheck();
@@ -236,6 +240,7 @@ export function AboutDeclaration() {
                     </div>
                 )}
             </div>
+            )}
 
             {/* ── 免责声明 ── */}
             <p className="card-section-label m-0 mx-2">免责声明</p>
