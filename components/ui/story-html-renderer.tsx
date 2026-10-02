@@ -559,7 +559,7 @@ function HtmlPageSegment({ html, onOptionSelect, htmlPageMode, serifIframeFallba
     // （iOS 上 iframe 内部滚动手势不可靠，同文档滚动器则始终可靠）
     return (
         <div style={{
-            maxHeight: "min(68dvh, 560px)",
+            maxHeight: "min(68vh, 560px)",
             overflowY: "auto",
             WebkitOverflowScrolling: "touch",
             overscrollBehavior: "contain",
