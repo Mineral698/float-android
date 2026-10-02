@@ -1031,86 +1031,89 @@
 /* 更窄视口（≤373px）：按 390px 设计稿整体等比缩放（格 66→16.92vw、
    距 20→5.13vw、图标 58→14.87vw、dock 354→90.77vw），窄屏呈现与正常
    手机完全相同的比例观感，无多余留白；网格/dock 同源，天然对齐。
-   ≥374px 不受影响。 */
-@media (max-width: 373px) and (hover: none) and (pointer: coarse) {
-  .icon-grid,
-  .dock {
-    --slot-size: 16.92vw;
-    --slot-gap-x: 5.13vw;
-    --slot-icon-width: 15.9vw;
-    --slot-icon-height: 15.9vw;
-  }
-  .icon-glyph-box {
-    width: 14.87vw;
-    height: 14.87vw;
-  }
-  .dock {
-    /* 同样按数量自适应；count=4 时等于原 90.77vw。 */
-    width: min(calc((var(--dock-count) * var(--slot-size)) + ((var(--dock-count) - 1) * var(--slot-gap-x)) + 30px), calc(100% - 8px));
-  }
-  .dock .dock-glyph-box {
-    width: 14.87vw;
-    height: 14.87vw;
-  }
+   ≥374px 不受影响。
+   判定由 lib/shell-layout-mode.ts 挂到 html.phone-shell-narrow：
+   不能用裸媒体查询——部分设备误报 hover/pointer 特性，整块会失效。 */
+html.phone-shell-narrow .icon-grid,
+html.phone-shell-narrow .dock {
+  --slot-size: 16.92vw;
+  --slot-gap-x: 5.13vw;
+  --slot-icon-width: 15.9vw;
+  --slot-icon-height: 15.9vw;
+}
+html.phone-shell-narrow .icon-glyph-box {
+  width: 14.87vw;
+  height: 14.87vw;
+}
+html.phone-shell-narrow .dock {
+  /* 同样按数量自适应；count=4 时等于原 90.77vw。 */
+  width: min(calc((var(--dock-count) * var(--slot-size)) + ((var(--dock-count) - 1) * var(--slot-gap-x)) + 30px), calc(100% - 8px));
+}
+html.phone-shell-narrow .dock .dock-glyph-box {
+  width: 14.87vw;
+  height: 14.87vw;
 }
 
-/* ── Mobile responsive ── */
+/* ── Mobile responsive ──
+   判定由 lib/shell-layout-mode.ts 挂到 html.phone-shell-mobile：
+   原生 Capacitor 壳恒为 true（真实设备本身就是手机，不需要内嵌手机框），
+   纯浏览器沿用 (max-width:500px)+(hover:none)+(pointer:coarse) 媒体查询。
+   不能写回 @media——部分 ROM/手写笔设备误报 hover/pointer 特性、
+   折叠屏/平板视口可 >500px，会让整个移动端布局静默失效。 */
 
-@media (max-width: 500px) and (hover: none) and (pointer: coarse) {
+/* 用户在设置里显式开启「显示系统状态栏」且运行时不在全屏时，控制器才会挂
+   data-pwa-display-mode 标记（见 pwa-manifest-injector）：此时所有 App 共用系统
+   安全区，不再重复预留 48px 虚拟状态栏。未开启开关的用户（含 iOS 装机用户，
+   iOS 永远报 standalone）不受影响，保持沉浸外观。 */
+html.phone-shell-mobile[data-pwa-display-mode="standalone"] .phone-shell,
+html.phone-shell-mobile[data-pwa-display-mode="minimal-ui"] .phone-shell,
+html.phone-shell-mobile[data-pwa-display-mode="browser"] .phone-shell {
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --phone-titlebar-safe-top: env(safe-area-inset-top, 0px);
+  --page-header-safe-top: env(safe-area-inset-top, 0px);
+  --home-grid-top-offset: calc(env(safe-area-inset-top, 0px) + 16px);
+}
 
-  /* 用户在设置里显式开启「显示系统状态栏」且运行时不在全屏时，控制器才会挂
-     data-pwa-display-mode 标记（见 pwa-manifest-injector）：此时所有 App 共用系统
-     安全区，不再重复预留 48px 虚拟状态栏。未开启开关的用户（含 iOS 装机用户，
-     iOS 永远报 standalone）不受影响，保持沉浸外观。 */
-  html[data-pwa-display-mode="standalone"] .phone-shell,
-  html[data-pwa-display-mode="minimal-ui"] .phone-shell,
-  html[data-pwa-display-mode="browser"] .phone-shell {
-    --safe-area-top: env(safe-area-inset-top, 0px);
-    --phone-titlebar-safe-top: env(safe-area-inset-top, 0px);
-    --page-header-safe-top: env(safe-area-inset-top, 0px);
-    --home-grid-top-offset: calc(env(safe-area-inset-top, 0px) + 16px);
-  }
+html.phone-shell-mobile[data-pwa-display-mode="standalone"] .phone-shell > .phone-status-bar,
+html.phone-shell-mobile[data-pwa-display-mode="minimal-ui"] .phone-shell > .phone-status-bar,
+html.phone-shell-mobile[data-pwa-display-mode="browser"] .phone-shell > .phone-status-bar {
+  display: none;
+}
 
-  html[data-pwa-display-mode="standalone"] .phone-shell > .phone-status-bar,
-  html[data-pwa-display-mode="minimal-ui"] .phone-shell > .phone-status-bar,
-  html[data-pwa-display-mode="browser"] .phone-shell > .phone-status-bar {
-    display: none;
-  }
+html.phone-shell-mobile[data-pwa-display-mode="standalone"] .phone-shell-wrap,
+html.phone-shell-mobile[data-pwa-display-mode="minimal-ui"] .phone-shell-wrap,
+html.phone-shell-mobile[data-pwa-display-mode="browser"] .phone-shell-wrap {
+  margin-top: 0;
+}
 
-  html[data-pwa-display-mode="standalone"] .phone-shell-wrap,
-  html[data-pwa-display-mode="minimal-ui"] .phone-shell-wrap,
-  html[data-pwa-display-mode="browser"] .phone-shell-wrap {
-    margin-top: 0;
-  }
+html.phone-shell-mobile {
+  --phone-screen-width: 100vw;
+  /* 不能用 lvh/dvh：Chrome<108 的旧 WebView 不认识，经 var() 代入 height 后
+     computed-time 失效 → auto，整壳塌成只剩 padding 的一条带子。vh 在
+     WebView 里与 lvh 完全等价（无动态浏览器栏），且所有引擎都支持。 */
+  --phone-screen-height: 100vh;
+}
 
-  :root {
-    --phone-screen-width: 100vw;
-    /* 不能用 lvh/dvh：Chrome<108 的旧 WebView 不认识，经 var() 代入 height 后
-       computed-time 失效 → auto，整壳塌成只剩 padding 的一条带子。vh 在
-       WebView 里与 lvh 完全等价（无动态浏览器栏），且所有引擎都支持。 */
-    --phone-screen-height: 100vh;
-  }
+html.phone-shell-mobile,
+html.phone-shell-mobile body {
+  overflow: hidden;
+  width: 100%;
+  height: 100vh;
+  background: var(--c-page-body-bg);
+}
 
-  html,
-  body {
-    overflow: hidden;
-    width: 100%;
-    height: 100vh;
-    background: var(--c-page-body-bg);
-  }
+html.phone-shell-mobile .app-root {
+  width: 100vw;
+  height: 100vh;
+  padding: 0;
+  display: flex;
+  justify-content: flex-start;
+  align-items: flex-start;
+  overflow: hidden;
+  background: var(--c-page-body-bg);
+}
 
-  .app-root {
-    width: 100vw;
-    height: 100vh;
-    padding: 0;
-    display: flex;
-    justify-content: flex-start;
-    align-items: flex-start;
-    overflow: hidden;
-    background: var(--c-page-body-bg);
-  }
-
-  .phone-shell-wrap {
+html.phone-shell-mobile .phone-shell-wrap {
     --phone-case-padding: 0px;
     --phone-case-border-size: 0px;
     --phone-frame-size: 0px;
@@ -1130,52 +1133,51 @@
     transform: translate3d(0, calc(-1 * var(--mobile-keyboard-lift, 0px)), 0);
     transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
     will-change: transform;
-  }
+}
 
-  .phone-shell-wrap .phone-case {
-    padding: 0;
-    border: 0;
-    background: transparent;
-    box-shadow: none;
-  }
+html.phone-shell-mobile .phone-shell-wrap .phone-case {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
 
-  .phone-shell-wrap .phone-case::before,
-  .phone-shell-wrap .phone-case::after {
-    display: none;
-  }
+html.phone-shell-mobile .phone-shell-wrap .phone-case::before,
+html.phone-shell-mobile .phone-shell-wrap .phone-case::after {
+  display: none;
+}
 
-  .phone-shell-wrap .phone-frame {
-    padding: 0;
-    background: transparent;
-    box-shadow: none;
-  }
+html.phone-shell-mobile .phone-shell-wrap .phone-frame {
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+}
 
-  .phone-shell-wrap .phone-frame::before,
-  .phone-shell-wrap .phone-frame::after {
-    display: none;
-  }
+html.phone-shell-mobile .phone-shell-wrap .phone-frame::before,
+html.phone-shell-mobile .phone-shell-wrap .phone-frame::after {
+  display: none;
+}
 
-  .app-root.splash-root {
-    width: 100vw;
-    height: 100vh;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    align-items: flex-start;
-    justify-content: flex-start;
-    overflow: hidden;
-    background: var(--c-page-body-bg);
-  }
+html.phone-shell-mobile .app-root.splash-root {
+  width: 100vw;
+  height: 100vh;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+  overflow: hidden;
+  background: var(--c-page-body-bg);
+}
 
-  .splash-shell-wrap {
-    width: var(--phone-screen-width);
-    transform-origin: top left;
-  }
+html.phone-shell-mobile .splash-shell-wrap {
+  width: var(--phone-screen-width);
+  transform-origin: top left;
+}
 
-  .splash-shell-wrap .phone-case,
-  .splash-shell-wrap .phone-frame {
-    width: var(--phone-screen-width);
-  }
+html.phone-shell-mobile .splash-shell-wrap .phone-case,
+html.phone-shell-mobile .splash-shell-wrap .phone-frame {
+  width: var(--phone-screen-width);
 }
 
 .settings-main-menu,

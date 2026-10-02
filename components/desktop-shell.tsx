@@ -8,6 +8,7 @@ import { startFollowUpService, stopFollowUpService } from "@/lib/follow-up-servi
 import { startMomentsService, stopMomentsService } from "@/lib/moments-engine";
 import { bgTimerCleanup } from "@/lib/bg-timer";
 import { isNativeApp } from "@/lib/download-utils";
+import { isPhoneShellMobile } from "@/lib/shell-layout-mode";
 import { PhonePlaceholderApp } from "@/components/phone-placeholder-app";
 import { ChatPluginPageBoundary } from "@/components/chat/chat-plugin-page-boundary";
 import "@/lib/qa-error-log";
@@ -951,7 +952,6 @@ function useAndroidCaretKeyboardLift() {
       return;
     }
 
-    const mobileMq = window.matchMedia("(max-width: 500px) and (hover: none) and (pointer: coarse)");
     const viewport = window.visualViewport;
     let focusedElement: HTMLElement | null = null;
     let raf = 0;
@@ -971,7 +971,7 @@ function useAndroidCaretKeyboardLift() {
     const update = () => {
       raf = 0;
       const element = focusedElement;
-      if (!element || document.activeElement !== element || !mobileMq.matches || !viewport) {
+      if (!element || document.activeElement !== element || !isPhoneShellMobile() || !viewport) {
         applyLift(0);
         return;
       }
