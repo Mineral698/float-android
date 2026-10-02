@@ -9,8 +9,11 @@ import { generateEmbedding, isEmbeddingModelName } from "@/lib/memory-embedding"
 import { ConfirmDialog } from "@/components/ui/modal";
 import { Toggle, Input } from "@/components/ui/form";
 import { Alert } from "@/components/ui/feedback";
-import { determineBaseUrl, simpleLLMCall } from "@/lib/api-helpers";
+import { determineBaseUrl } from "@/lib/api-helpers";
 import { httpFetch } from "@/lib/native-http";
+import { buildNativeChatTools, sendLLMStreamRequest, sendLLMToolStreamRequest } from "@/lib/chat-engine";
+import { nativeToolProtocolForConfig } from "@/lib/llm-provider-adapter";
+import { getEnabledTools } from "@/lib/tool-storage";
 
 const DEFAULT_CONFIGS: ApiConfig[] = [
     {
@@ -172,6 +175,19 @@ export function ApiSettings() {
         setIsTesting(prev => ({ ...prev, [config.id]: true }));
         setTestResult(prev => ({ ...prev, [config.id]: { success: false, message: "" } }));
 
+        // 走真实聊天的流式路径（stream:true + SSE）：部分中转站的上游渠道
+        // 只收流式请求，或对非流式请求设 before_request 护栏（max_tokens 上限等），
+        // 旧版非流式 simpleLLMCall 测试会被 400 request_rejected 拒掉——
+        // 「能拉模型列表但测试失败」的假阴性。
+        // 不开原生工具时不带 tools；开着时按真实聊天携带已启用工具定义，
+        // 让「上游不支持 tools」也能在测试阶段暴露。
+        // 不塞 max_tokens：让模型自然收尾，避开上游的输出上限护栏。
+        const toolDefinitions = isEmbeddingModelName(config.defaultModel)
+            ? []
+            : nativeToolProtocolForConfig(config)
+                ? buildNativeChatTools(getEnabledTools("chat")).definitions
+                : [];
+
         try {
             // 向量模型配置：测 /embeddings 端点。原来一律测 /chat/completions，
             // 导致 embedding 配置永远 404「测试失败」。
@@ -184,27 +200,50 @@ export function ApiSettings() {
                 }));
                 return;
             }
-            const result = await simpleLLMCall(
-                config,
-                [{ role: "user", content: "你好" }],
-                // Cap (not spend): reasoning models (deepseek-reasoner / gemini-pro 等) burn
-                // tokens on hidden reasoning first, so a tiny cap leaves the visible
-                // content empty and the test falsely fails (finishReason=length).
-                // 4096 covers heavy thinkers; a "你好" reply still stops well before it.
-                { temperature: 0.2, max_tokens: 4096 },
-            );
-            if (result.error || !result.content) {
-                throw new Error(result.error || "模型返回了空内容");
+            let reasoningSeen = "";
+            const streamCallbacks = {
+                onReasoningDelta: (text: string) => { reasoningSeen += text; },
+            };
+            const requestOptions = { appId: "api-test", signal: AbortSignal.timeout(90_000) };
+            let previewSource = "";
+            try {
+                if (toolDefinitions.length > 0) {
+                    const result = await sendLLMToolStreamRequest(
+                        config, null, [{ role: "user" as const, content: "你好" }], toolDefinitions, [],
+                        undefined, requestOptions, streamCallbacks,
+                    );
+                    previewSource = result.content || result.reasoning
+                        || (result.toolCalls.length > 0 ? `[模型发起 ${result.toolCalls.length} 个动作调用]` : "");
+                } else {
+                    const result = await sendLLMStreamRequest(
+                        config, null, [{ role: "user" as const, content: "你好" }], [],
+                        undefined, { ...requestOptions, skipOutputRegex: true }, streamCallbacks,
+                    );
+                    previewSource = result.content;
+                }
+            } catch (streamError) {
+                // 推理型上游可能只吐 reasoning 不出正文：有推理增量同样证明链路可用
+                if (!reasoningSeen.trim()) throw streamError;
+                previewSource = reasoningSeen;
             }
-            const reply = result.content.replace(/\s+/g, " ").trim();
+            if (!previewSource.trim()) {
+                throw new Error("模型返回了空内容");
+            }
+            const reply = previewSource.replace(/\s+/g, " ").trim();
             const preview = reply.length > 80 ? `${reply.slice(0, 80)}...` : reply;
             setTestResult(prev => ({
                 ...prev,
                 [config.id]: { success: true, message: `测试成功! 模型回复: ${preview}` },
             }));
         } catch (error: unknown) {
-            const msg = error instanceof Error ? error.message : String(error);
-            setTestResult(prev => ({ ...prev, [config.id]: { success: false, message: `测试失败: ${msg}` } }));
+            const isAbort = error instanceof DOMException && error.name === "AbortError";
+            const msg = isAbort
+                ? "连接超时（90 秒无响应），请检查网络或稍后重试"
+                : error instanceof Error ? error.message : String(error);
+            const toolHint = toolDefinitions.length > 0
+                ? "（测试已按当前配置携带原生工具定义；若上游不支持 tools，可关闭「启用原生工具调用」后重试）"
+                : "";
+            setTestResult(prev => ({ ...prev, [config.id]: { success: false, message: `测试失败: ${msg}${toolHint}` } }));
         } finally {
             setIsTesting(prev => ({ ...prev, [config.id]: false }));
         }
