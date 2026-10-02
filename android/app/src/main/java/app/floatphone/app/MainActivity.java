@@ -22,5 +22,11 @@ public class MainActivity extends BridgeActivity {
         // 应用自更新：GitHub Release APK 原生下载（断点续传）+ 拉起系统安装器
         registerPlugin(AppUpdaterPlugin.class);
         super.onCreate(savedInstanceState);
+        // 免疫系统字体缩放：WebView textZoom 会跟随系统 FONT_SCALE，
+        // 大字体会把这台「虚拟手机」的整版 UI 文字放大打乱布局。
+        // 应用内有自己的文字缩放设置，不需要系统层再叠一层。
+        if (getBridge() != null && getBridge().getWebView() != null) {
+            getBridge().getWebView().getSettings().setTextZoom(100);
+        }
     }
 }

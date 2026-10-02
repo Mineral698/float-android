@@ -1399,7 +1399,7 @@ const CUSTOM_APP_CREATOR_GUIDE_LINES = [
   "}",
   "* { box-sizing: border-box; }",
   ".app {",
-  "  min-height: 100dvh;",
+  "  min-height: 100vh;",
   "  padding: 0 16px var(--ai-phone-app-safe-bottom, 24px);",
   "  /* padding-top 见下面「顶部怎么摆」，A / B 二选一 */",
   "}",
