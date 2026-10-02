@@ -2,6 +2,8 @@
 
 import { useLayoutEffect, useRef } from "react";
 
+import { isTouchPrimary } from "@/lib/shell-layout-mode";
+
 const SCRIPT = [
   { side: "right", text: "you ever zone out mid-toast?", start: 80, type: 0 },
   { side: "left", text: "the bread became a small sunset.", start: 560, type: 310 },
@@ -88,7 +90,7 @@ export function SplashAnimation() {
     const supportsCanvasFilter = typeof (ctx as CanvasRenderingContext2D & { filter?: string }).filter === "string";
     const useSoftEdgeFallback =
       !supportsCanvasFilter ||
-      window.matchMedia("(hover: none) and (pointer: coarse)").matches;
+      isTouchPrimary();
 
     let W = 0;
     let H = 0;
