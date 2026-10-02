@@ -85,7 +85,7 @@ export async function getCurrentVersion(): Promise<string> {
 
 function parseRelease(raw: Record<string, unknown>): ReleaseInfo | null {
     const assets = (raw.assets as Array<Record<string, unknown>> | undefined) ?? [];
-    const apk = assets.find(a => typeof a.name === "string" && a.name.endsWith(".apk"));
+    const apk = assets.find(a => typeof a.name === "string" && a.name.toLowerCase().endsWith(".apk"));
     if (!apk) return null;
     return {
         tag: String(raw.tag_name ?? ""),
