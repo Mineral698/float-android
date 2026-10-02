@@ -121,7 +121,7 @@ Releases are GitHub Releases built from `main`:
 
 1. Bump `versionName` in `android/app/build.gradle` and `version` in `package.json` to the new `X.Y.Z`; bump `versionCode` by 1 (Android treats upgrades by `versionCode`, the updater compares `versionName`).
 2. Build: `npm run build` → `npx cap sync android` → `cd android && ./gradlew assembleRelease` (signed via local `keystore.properties`, never committed).
-3. Publish: `gh release create vX.Y.Z float-android-X.Y.Z.APK --repo shiaho777/float-android --target main --title "Float vX.Y.Z" --notes "…"` — asset name is `float-android-X.Y.Z.APK`, tag is `vX.Y.Z` on `main`.
+3. Publish: `gh release create vX.Y.Z float-android-X.Y.Z.apk --repo shiaho777/float-android --target main --title "Float vX.Y.Z" --notes "…"` — asset name is `float-android-X.Y.Z.apk` (lowercase `.apk` — updater builds pre-1.0.2 match it case-sensitively), tag is `vX.Y.Z` on `main`.
 4. To re-spin the same version (hot-fixing a just-published release), delete and recreate the release+tag at the new commit rather than pushing a moved tag silently: `gh release delete vX.Y.Z --cleanup-tag` then the same `gh release create` line.
 
 The in-app updater (设置 → 关于与声明) lists these releases and downloads the first `*.apk` asset — keep exactly one APK asset per release.
