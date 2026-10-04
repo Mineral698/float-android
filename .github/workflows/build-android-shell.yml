@@ -33,6 +33,10 @@ jobs:
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # v3 defaults to "tools platform-tools". Google no longer serves
+          # the deprecated "tools" package, so sdkmanager exits 1.
+          packages: platform-tools
 
       - name: Install Android SDK packages
         run: |
