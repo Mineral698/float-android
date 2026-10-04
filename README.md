@@ -25,7 +25,7 @@
 - **沉浸感是设计出来的**。角色不是一问一答的聊天框：他们按自己的时区作息和日程生活，会在地图上显示当前位置，知道当地货币的物价尺度，聊过的事会沉淀成长期记忆，性格还会随记忆反思慢慢演变——还会在你不说话的时候主动来消息、发朋友圈、写日记。
 - **真·后台运行**。LLM 流式响应和生图任务走了 OkHttp 原生传输层 + 前台服务 + WakeLock，切后台、锁屏都不会断——生成完该来的消息照样来。
 - **细节有手感**。桌面和 Dock 常驻挂载，返回桌面不闪烁；通话可以缩成悬浮小窗挂着聊；转账红包、双语对照、消息翻译、拍立得卡片……都是按真手机的习惯做的。
-- **更新不用找包**。设置里检查更新，断点续传下载，一键拉起安装。
+- **自己构建、自己安装**。Fork 之后在 Actions 里跑一次，下载调试包装到手机。同一把调试证书，源码里的版本号上去之后可以覆盖安装。
 
 ## 都有什么功能
 
@@ -68,14 +68,32 @@
 
 ## 怎么使用
 
-1. 从 [Releases](https://github.com/shiaho777/float-android/releases/latest) 下载 APK 安装到 Android 手机；
+1. 按下面的步骤，在自己的 GitHub 仓库里构建 APK 并装到 Android 手机；
 2. 打开 App → **设置 → API 设置**，填 LLM 的 Base URL + API Key（支持任意 OpenAI 兼容接口、Anthropic、Google Gemini）；
 3. 创建或导入角色卡，开始聊天；
 4. 可选：在设置里继续配生图、语音、网易云音乐。
 
 首次导出聊天记录时，系统会请求「所有文件访问」权限——授予后导出和每 6 小时的自动备份都会写入公共 Documents 目录。
 
-想自己打包：`npm run build:apk` 同步到 Android 工程，`cd android && ./gradlew assembleRelease`（需要 JDK 17+ 和 Android SDK）。
+## 自己构建 APK
+
+安装包不放在这个仓库的 Release 里。Fork 到你自己的 GitHub 账号，在你的仓库里点一次构建，装你自己编出来的包。
+
+1. 点本仓库的 **Fork**，得到你名下的一份副本。
+2. 打开你的仓库。如果顶部没有 **Actions**，或进去是关闭状态：进 **Settings → Actions → General**，选 Allow all actions，保存。
+3. 点顶部的 **Actions**。
+4. 左侧找到 **Build Android Shell APK**，点进去。
+5. 右侧点 **Run workflow**，弹出的小框里再点绿色的 **Run workflow**。
+6. 等几分钟跑完，点进那次运行，拉到底部 **Artifacts**，下载 `float-shell-debug`。
+7. 下载下来的是一个压缩包，解压得到 `app-debug.apk`，传到手机上安装。
+
+这个附件在你的仓库里保留 14 天。过期了再跑一次 workflow。
+
+更新：在你的仓库页面用 **Sync fork** 拉上游的新提交，然后把上面的第 3 步到第 7 步再做一遍。调试包用仓库里的同一把调试证书签名，可以盖住上一只自己构建的包。手机认的是源码里的 `versionCode`：上游发新版本时会把它加一，同步后再构建，系统才会把它当成更新。有的手机拒绝安装版本号相同的包，那种情况等下一次版本号上去再构建。
+
+已经装过以前那只正式签名包的手机，第一次换到这个调试包时签名对不上，要先卸载再装。卸载前在应用里把存档导出，装好再导入。
+
+本机自己打包（需要 JDK 21 和 Android SDK）：`npm run build:apk`，然后 `cd android && ./gradlew assembleDebug`。这样打出来的调试包和 Actions 的包是同一把证书。正式签名仍然只用本机的 `android/keystore.properties`，那个文件不要提交。
 
 ## 技术实现
 

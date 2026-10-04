@@ -1,0 +1,59 @@
+# Manual debug APK for people who fork this repo.
+# The artifact stays on the fork that clicked Run workflow. This workflow
+# does not publish a GitHub Release and does not close Issues.
+
+name: Build Android Shell APK
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      NODE_OPTIONS: "--max-old-space-size=6144"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK packages
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager --install "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
+
+      - name: Build web bundle and sync Android
+        run: npm run build:apk
+
+      - name: Assemble debug APK
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon -Dorg.gradle.jvmargs=-Xmx4g
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: float-shell-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
