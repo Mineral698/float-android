@@ -40,20 +40,27 @@ WebView page
   → Capacitor bridge → native plugins (Java/Kotlin under android/app/.../app/floatphone/app/)
   → Dexie/IndexedDB (all app data, per-entity tables)
   → user-configured third-party APIs (LLM / image / voice / music / map tiles)
+
+Static host (Netlify / Cloudflare Pages / Vercel / any server of out/)
+  → the same pages in the browser
+  → fetch to the user-configured APIs
+  → IndexedDB
+  → optional directory-handle auto-backup (lib/web-backup-directory.ts)
 ```
 
 Mental model:
 
 - **Everything is client-side.** There is no project backend. Data lives in IndexedDB (via Dexie stores in `lib/`), app-private native media storage, and localStorage. Supabase-dependent modules from upstream were removed in this branch; direct third-party connectivity (LLM, image gen, music, map tiles) remains.
+- **Two shipping shapes share `out/`.** The Android and iOS shells load it through Capacitor. A static host serves the same directory as the website (`netlify.toml`, `vercel.json`, publish directory `out`, domain root). Browser code has to keep working when no native plugin is registered.
 - **A feature that must survive screen-off / app-switch** must route through the keep-alive service (`GenerationKeepAliveService` + plugin) and use native HTTP/SSE (`NativeHttpPlugin` via `lib/native-http.ts`) instead of `fetch`, so streaming survives WebView throttling.
 - **Large media must not travel over the bridge as base64.** Import/export writes chunks via `Filesystem` (`lib/download-utils.ts`); media blobs are stored natively and referenced as `media-store://<id>` (`NativeMediaPlugin`, `lib/native-media.ts`).
 
 ## Platform constraints
 
-- **CORS:** GitHub release assets, some API endpoints, and arbitrary user-hosted files lack CORS headers — WebView `fetch`/`XHR` fails on them even though the network is fine. Route such requests through `httpFetch`/`nativeHttp` (OkHttp) or Dexie's own sync — never assume browser `fetch` reaches them.
+- **CORS:** GitHub release assets, some API endpoints, and arbitrary user-hosted files lack CORS headers — WebView `fetch`/`XHR` fails on them even though the network is fine. Inside the Android shell, route such requests through `httpFetch`/`nativeHttp` (OkHttp). A hosted website has no OkHttp: the page calls the user's API with `fetch`, so that API must allow the site origin. An `http://` LAN endpoint fails on an `https` page because of mixed content.
 - **Memory:** never accumulate large base64 strings in JS for import/export; the bridge serializes every call. Use the chunked `writeFile`/`appendFile` pattern in `lib/download-utils.ts` (16 MB chunks).
 - **Bridge payloads:** Capacitor bridge messages are JSON — sending MB-scale progress/blob data per event floods it. Native plugins emit throttled progress events only; bytes stay native-side.
-- **`targetSdk` 35 storage:** public-Documents access requires `MANAGE_EXTERNAL_STORAGE` via `StorageAccessPlugin` → system settings grant → app restart. `lib/storage-access.ts` drives the prompt flow; `lib/auto-backup.ts` and exporters must go through `StorageAccessPlugin.requirePermission()` before touching `/storage/emulated/0/`.
+- **`targetSdk` 35 storage:** public-Documents access requires `MANAGE_EXTERNAL_STORAGE` via `StorageAccessPlugin` → system settings grant → app restart. `lib/storage-access.ts` drives the prompt flow; Android auto-backup and exporters must go through `StorageAccessPlugin.requirePermission()` before touching `/storage/emulated/0/`. Browser auto-backup does not use that plugin. It stores a `FileSystemDirectoryHandle` in `lib/web-backup-directory.ts` and writes the same zip names. Browsers without `showDirectoryPicker` keep the manual export.
 - **Self-update:** `lib/app-updater.ts` + `AppUpdaterPlugin` implement check/download/install against GitHub Releases. Downloads are native OkHttp streams with Range-resume; the JS layer is a state machine only. Progress events are only accepted while state is `downloading` (pause-race guard) — keep that invariant when touching it.
 - **Version alignment:** `package.json` version, `android/app/build.gradle` `versionName`, and the release tag must agree (`1.0.0` ↔ `v1.0.0`). The updater compares `versionName` against tag names.
 - Avoid new third-party dependencies unless strongly justified; prefer existing modules in `lib/` and platform APIs.
@@ -71,14 +78,15 @@ The web core (`components/`, `lib/`, `entries/`, `styles/`) is shared and must s
 
 **Capability matrix:**
 
-| Wrapper / plugin | Android | iOS |
-|---|---|---|
-| `native-http` (`NativeHttp`) | OkHttp SSE streaming | `fetch` fallback |
-| `native-media` (`NativeMedia`) | Native disk store, `media-store://` refs | IndexedDB blob fallback |
-| `keep-alive` (`GenerationKeepAlive`) | Foreground service + WakeLock | No-op — iOS suspends background tasks; generation requires the app in the foreground |
-| `storage-access` (`StorageAccess`) | MANAGE_EXTERNAL_STORAGE → public Documents | Always "granted"; exports live in the app sandbox / share sheet |
-| `media-permissions` (`MediaPermissions`) | Runtime permission prompts | Always "granted"; iOS prompts are driven by `Info.plist` usage descriptions + WKWebView getUserMedia |
-| `app-updater` (`AppUpdater`) | Check/download/install GitHub APK | **Removed** — Apple 2.5.2 forbids in-app binary install; updates ship via App Store/TestFlight |
+| Wrapper / plugin | Android | iOS | Hosted website |
+|---|---|---|---|
+| `native-http` (`NativeHttp`) | OkHttp SSE streaming | `fetch` fallback | `fetch`. The API must allow the site origin |
+| `native-media` (`NativeMedia`) | Native disk store, `media-store://` refs | IndexedDB blob fallback | IndexedDB blob fallback |
+| `keep-alive` (`GenerationKeepAlive`) | Foreground service + WakeLock | No-op — iOS suspends background tasks; generation requires the app in the foreground | No-op — generation runs while the tab is open |
+| `storage-access` (`StorageAccess`) | MANAGE_EXTERNAL_STORAGE → public Documents | Always "granted"; exports live in the app sandbox / share sheet | Unused. Exports use a download or the system share sheet |
+| `auto-backup` | Public Documents, keep 3 zips | App Documents via Capacitor Filesystem, keep 3 zips | Directory handle when the browser has one; otherwise manual export |
+| `media-permissions` (`MediaPermissions`) | Runtime permission prompts | Always "granted"; iOS prompts are driven by `Info.plist` usage descriptions + WKWebView getUserMedia | Browser permission prompts |
+| `app-updater` (`AppUpdater`) | Check/download/install GitHub APK | **Removed** — Apple 2.5.2 forbids in-app binary install; updates ship via App Store/TestFlight | Hidden. The site updates when the host rebuilds |
 
 **iOS hard constraints:**
 
@@ -121,7 +129,7 @@ Releases are GitHub Releases built from `main`:
 
 1. Bump `versionName` in `android/app/build.gradle` and `version` in `package.json` to the new `X.Y.Z`; bump `versionCode` by 1 (Android treats upgrades by `versionCode`; a debug build can replace the previous one only when this number goes up and the debug certificate matches).
 2. Publish a notes-only tag on `main`. Do not attach an APK: `gh release create vX.Y.Z --repo shiaho777/float-android --target main --title "Float vX.Y.Z" --notes "…"`.
-3. People install by forking and running **Build Android Shell APK** (see README). The artifact name is `float-shell-debug`. It is a debug APK signed with `android/app/debug.keystore`.
+3. People install by forking and running **Build Android Shell APK** (see README). The artifact name is `float-shell-debug`. It is a debug APK signed with `android/app/debug.keystore`. The other shipping path is the static website: hosts serve `out/` (see README). That site is not a GitHub Release asset.
 4. To re-spin the same version, delete and recreate the release and tag at the new commit: `gh release delete vX.Y.Z --cleanup-tag`, then the same `gh release create` line, still with no APK asset.
 
 The in-app updater (设置 → 关于与声明) only lists a release that has an `.apk` asset. Notes-only tags do not show up there. Do not add an APK asset to bring it back.
