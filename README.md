@@ -45,16 +45,16 @@ Release 里不附安装包。Fork 到自己的 GitHub 账号，在 Actions 里�
 3. 打开 **Actions**。
 4. 左侧选择 **Build Android Shell APK**。
 5. 右侧点 **Run workflow**，在弹出的小框里再点一次 **Run workflow**。
-6. 运行结束后，在页面底部的 **Artifacts** 下载 `float-shell-debug`。
-7. 解压得到 `app-debug.apk`，传到手机安装。
+6. 运行结束后，在页面底部的 **Artifacts** 下载 `float-android-` 加当前版本号。
+7. 解压得到 `float-android-<版本号>.apk`，例如版本 1.0.2 就是 `float-android-1.0.2.apk`，传到手机安装。版本号变了，文件名里的数字一起变。
 
 附件保留 14 天。过期之后再运行一次。
 
-更新时在仓库页用 **Sync fork** 拉取新提交，然后从第 3 步做到第 7 步。这些调试包使用仓库里的同一把调试证书，可以覆盖上一只自己构建的包。手机认源码里的 `versionCode`。发新版本时会把这个数字加一，同步后再构建，系统才会把它当成更新。有的手机会拒绝安装版本号相同的包，那种情况等下一次版本号上去再构建。
+这是正式构建。仓库里不放私人签名，Actions 用仓库里的共享证书给这个正式包签名，后一次构建可以覆盖前一次。手机认源码里的 `versionCode`。发新版本时会把这个数字加一，同步后再构建，系统才会把它当成更新。有的手机会拒绝安装版本号相同的包，那种情况等下一次版本号上去再构建。
 
-以前装过正式签名包的手机，第一次换成这个调试包时要先卸载再装。卸载前先在应用里导出存档，装好再导入。
+以前装过另一把证书的包，第一次换成这个包时要先卸载再装。卸载前先在应用里导出存档，装好再导入。
 
-本机打包需要 JDK 21 和 Android SDK：`npm run build:apk`，然后 `cd android && ./gradlew assembleDebug`。打出来的调试包和 Actions 的包是同一把证书。正式签名用本机的 `android/keystore.properties`，这个文件不要提交。
+本机打包需要 JDK 21 和 Android SDK：`npm run build:apk`，然后 `cd android && ./gradlew assembleRelease`。没有 `android/keystore.properties` 时，本机打出的正式包和 Actions 用同一把证书。有这个文件时用你自己的正式签名，这个文件不要提交。调试包用 `./gradlew assembleDebug`。
 
 ### 方式二：部署网页
 
