@@ -41,6 +41,7 @@ import {
     resolvePromptTimeAware,
     type PromptTimestampOptions,
 } from "./prompt-time";
+import { groupMessageInvolvesCharacter, textMentionsCharacter } from "./group-memory-scope";
 
 function formatPhotoDirectiveForPrompt(msg: ChatMessage): string {
     const description = msg.mediaData?.label?.trim() || "图片";
@@ -166,6 +167,11 @@ export function loadNativeTimeline(
         excludeOfflineSessionId?: string;
         timeAware?: boolean;
         promptTimestampOptions?: PromptTimestampOptions;
+        /**
+         * 长期记忆总结用。群聊只保留这个角色的亲历，不把同群其他人的生活写进他的记忆。
+         * 聊天提示词的近期上下文不要开这个开关。
+         */
+        forPersonalMemory?: boolean;
     }
 ): NativeTimelineEntry[] {
     const entries: NativeTimelineEntry[] = [];
@@ -181,13 +187,35 @@ export function loadNativeTimeline(
     const session = sessions.find(s => !s.isGroup && s.contactId === characterId);
     const groupSessions = sessions.filter(s => s.isGroup && s.participantIds?.includes(characterId));
 
+    const personalMemory = options?.forPersonalMemory === true;
+    const partyNames = [charName.trim()].filter(Boolean);
+    const soloGroupIds = new Set(
+        groupSessions
+            .filter(gs => (gs.participantIds?.length ?? 0) <= 1)
+            .map(gs => gs.id),
+    );
+
     // Process group sessions
     for (const gs of groupSessions) {
         const messages = loadChatMessages(gs.id);
+        const soloCharacterGroup = soloGroupIds.has(gs.id);
+        const senderByMessageId = new Map<string, { characterId?: string; senderName?: string }>();
+        if (personalMemory && !soloCharacterGroup) {
+            for (const msg of messages) {
+                senderByMessageId.set(msg.id, {
+                    characterId: msg.senderCharacterId,
+                    senderName: msg.senderName,
+                });
+            }
+        }
         for (const msg of messages) {
             if (msg.isRetracted) continue;
             if (isPromptHiddenChatMessage(msg)) continue;
             if (options?.afterTimestamp && msg.createdAt <= options.afterTimestamp) continue;
+            if (personalMemory && !groupMessageInvolvesCharacter(msg, { characterId, names: partyNames }, {
+                soloCharacterGroup,
+                senderByMessageId,
+            })) continue;
 
             let sender: string;
             if (msg.role === "user") sender = userName;
@@ -537,6 +565,12 @@ export function loadNativeTimeline(
         excludeSessionId: options?.excludeOfflineSessionId,
     });
     for (const offlineEntry of offlineEntries) {
+        // 线下群聊摘要是整群共用的。个人记忆里，多人群只留下点到这个角色的摘要。
+        if (personalMemory && offlineEntry.groupSessionId
+            && !soloGroupIds.has(offlineEntry.groupSessionId)
+            && !textMentionsCharacter(offlineEntry.content, partyNames)) {
+            continue;
+        }
         entries.push({
             id: offlineEntry.id,
             sourceApp: "chat",

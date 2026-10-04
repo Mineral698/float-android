@@ -39,10 +39,10 @@ import {
 } from "./chat-engine";
 import type { CustomAppPromptProfile } from "./custom-app-types";
 import { isNeteaseConfigured } from "./music-service";
-import { buildCalendarScheduleMarker, getCurrentCalendarScheduleForPrompt } from "./calendar-storage";
+import { buildCalendarScheduleMarker, clockForCalendarOwner, getCurrentCalendarScheduleForPrompt } from "./calendar-storage";
 import { formatPresenceForPrompt, resolveCharacterPresence, type CharacterPresence } from "./presence-engine";
 import { buildDailyWorldMarker } from "./daily-world-storage";
-import { formatIsoDate, getWeekStartIso } from "./calendar-utils";
+
 import {
     resolveBinding,
     loadBindingConfig,
@@ -69,6 +69,7 @@ import { loadMemoryConfig, incrementEventCounter } from "./memory-storage";
 import { retrieveCoreMemoriesForPrompt, retrieveMemoriesForPrompt } from "./memory-service";
 import { formatCoreMemories, formatLongTermMemories } from "./memory-injector";
 import { maybeRunSummarization } from "./memory-summarizer";
+import { groupMessageInvolvesCharacter, textMentionsCharacter } from "./group-memory-scope";
 import { prepareShortTermContext, prepareGroupShortTermContext } from "./short-term-assembler";
 import { parseActionTags, dispatchActions } from "./action-parser";
 import { getCustomStickerExample, loadCustomStickers } from "./custom-sticker-storage";
@@ -254,25 +255,46 @@ export function buildEditableGroupRoundText(
 }
 
 function scheduleGroupMemorySummarization(
-    participantIds: string[],
+    session: ChatSession,
     chars: ReturnType<typeof loadCharacters>,
     history: ChatMessage[],
-    replyCount: number,
+    replies: { characterId: string; responseText: string }[],
 ): void {
+    const uniqueParticipantIds = [...new Set(session.participantIds ?? [])];
+    const soloCharacterGroup = uniqueParticipantIds.length <= 1;
     const lastMessage = history[history.length - 1];
-    const userEventCount = lastMessage?.role === "user" ? 1 : 0;
-    const totalNewEvents = userEventCount + replyCount;
-    if (totalNewEvents <= 0) return;
+    const userMessage = lastMessage?.role === "user" ? lastMessage : undefined;
+    const senderByMessageId = new Map<string, { characterId?: string; senderName?: string }>();
+    if (!soloCharacterGroup) {
+        for (const msg of history) {
+            senderByMessageId.set(msg.id, {
+                characterId: msg.senderCharacterId,
+                senderName: msg.senderName,
+            });
+        }
+    }
 
-    const uniqueParticipantIds = [...new Set(participantIds)];
     for (const characterId of uniqueParticipantIds) {
         const character = chars.find(c => c.id === characterId);
         if (!character) continue;
-
-        for (let i = 0; i < totalNewEvents; i++) {
-            incrementEventCounter(characterId);
+        const names = [character.name.trim()].filter(Boolean);
+        let events = 0;
+        if (userMessage && groupMessageInvolvesCharacter(userMessage, { characterId, names }, {
+            soloCharacterGroup,
+            senderByMessageId,
+        })) {
+            events += 1;
         }
+        for (const reply of replies) {
+            if (reply.characterId === characterId) {
+                events += 1;
+                continue;
+            }
+            if (textMentionsCharacter(reply.responseText, names)) events += 1;
+        }
+        if (events <= 0) continue;
 
+        for (let i = 0; i < events; i++) incrementEventCounter(characterId);
         maybeRunSummarization(characterId, character.name)
             .catch(err => console.warn("[GroupChat] Memory counter/summarization failed:", err));
     }
@@ -342,13 +364,14 @@ async function buildGroupChatPromptMessages(
         if (!character) return null;
         const memberTimeContext = buildCharacterTimeContext(character.timeZone, now);
         memberTimeContexts[charId] = memberTimeContext;
+        const scheduleClock = clockForCalendarOwner("character", charId, now);
         const dailyWorld = buildDailyWorldMarker(
             charId,
-            formatIsoDate(now),
+            scheduleClock.dateIso,
             (id) => charMap.get(id)?.name ?? id,
         );
         const scheduleSummary = [
-            buildCalendarScheduleMarker("character", charId, getWeekStartIso(now)),
+            buildCalendarScheduleMarker("character", charId, scheduleClock.weekStartIso),
             dailyWorld,
         ].filter(Boolean).join("\n");
         const currentSchedule = getCurrentCalendarScheduleForPrompt("character", charId, now);
@@ -831,7 +854,6 @@ export async function generateGroupChatCompletion(
         regenerationHint: options?.regenerationHint,
     });
     const chars = loadCharacters();
-    const participantIds = session.participantIds || [];
 
     const MAX_TOOL_ROUNDS = 5;
     const meta = { characterName: `群聊:${session.groupName || "群聊"}` };
@@ -1052,7 +1074,7 @@ export async function generateGroupChatCompletion(
     }
 
     if (!options?.skipMemorySummarization) {
-        scheduleGroupMemorySummarization(participantIds, chars, history, finalResults.length);
+        scheduleGroupMemorySummarization(session, chars, history, finalResults);
     }
 
     return finalResults;

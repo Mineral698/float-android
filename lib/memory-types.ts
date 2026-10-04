@@ -43,6 +43,8 @@ export function effectiveSalience(entry: Pick<MemoryEntry, "salience" | "importa
 export type MemoryConfig = {
     autoSummarizeEnabled: boolean;          // whether auto-summarization runs after N events
     autoBuildCoreEnabled: boolean;          // whether core memories rebuild after long-term summarization
+    /** 空闲整理是否允许改写性格并注入下次聊天。默认关：反思可以有，性格覆盖层不自动长。 */
+    autoPersonaDriftEnabled: boolean;
     vectorRecallEnabled: boolean;           // whether vector embedding recall is used for memory retrieval
     maxLongTermEntries: number;
     summarizationEventInterval: number;     // trigger summarization every N events
@@ -159,6 +161,7 @@ export const DEFAULT_CORE_MEMORY_PROMPT = `你是一个核心记忆整理助手�
 export const DEFAULT_MEMORY_CONFIG: MemoryConfig = {
     autoSummarizeEnabled: true,
     autoBuildCoreEnabled: true,
+    autoPersonaDriftEnabled: false,
     vectorRecallEnabled: true,
     maxLongTermEntries: 500,
     summarizationEventInterval: 80,

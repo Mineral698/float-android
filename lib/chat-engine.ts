@@ -74,9 +74,9 @@ import { formatCustomAppChatDirectivesForPrompt } from "./custom-app-chat-direct
 import { loadAllTracks } from "./music-storage";
 import { getActiveAppTags } from "./content-tag-utils";
 import { isNeteaseConfigured, getUserPlaylists, getPlaylistTracks, checkLoginStatus, loadMusicApiConfig } from "./music-service";
-import { buildCalendarScheduleMarker, getCurrentCalendarScheduleForPrompt } from "./calendar-storage";
+import { buildCalendarScheduleMarker, clockForCalendarOwner, getCurrentCalendarScheduleForPrompt } from "./calendar-storage";
 import { formatPresenceForPrompt, resolveCharacterPresence } from "./presence-engine";
-import { getWeekStartIso, formatIsoDate } from "./calendar-utils";
+
 import { buildCharacterTimeContext } from "./character-time";
 import { buildTurnGapNote, getPromptTimestampOptionsForTimeContext, resolvePromptTimeAware } from "./prompt-time";
 import { buildDailyWorldMarker } from "./daily-world-storage";
@@ -1926,13 +1926,14 @@ export async function buildChatPromptMessages(
 
     const longTermMemories = memResults ? formatLongTermMemories(memResults) : "";
     const coreMemories = coreResults ? formatCoreMemories(coreResults) : "";
+    const scheduleClock = clockForCalendarOwner("character", character.id, now);
     const dailyWorld = buildDailyWorldMarker(
         character.id,
-        formatIsoDate(now),
+        scheduleClock.dateIso,
         (id) => chars.find(c => c.id === id)?.name ?? id,
     );
     const scheduleSummary = [
-        buildCalendarScheduleMarker("character", character.id, getWeekStartIso(now)),
+        buildCalendarScheduleMarker("character", character.id, scheduleClock.weekStartIso),
         dailyWorld,
     ].filter(Boolean).join("\n");
     const currentSchedule = getCurrentCalendarScheduleForPrompt("character", character.id, now);

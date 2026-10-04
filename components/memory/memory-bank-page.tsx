@@ -1296,6 +1296,7 @@ export function MemoryBankPage({
                 ) : null}
 
                 {/* Feature toggles */}
+                <p className="menu-group-desc mx-2">群聊里别人的事不会写进这个角色的长期记忆。只有他本人说的，或别人直接提到他、回应他的内容，才会留下。</p>
                 <p className="menu-group-desc mx-2">自动化</p>
                 <div className="menu-group">
                     <div className="menu-item">
@@ -1321,6 +1322,20 @@ export function MemoryBankPage({
                         <div className="menu-right">
                             <Toggle checked={config.autoBuildCoreEnabled ?? true} onChange={(v) => {
                                 const next = { ...config, autoBuildCoreEnabled: v };
+                                setConfig(next);
+                                saveMemoryConfig(next);
+                            }} />
+                        </div>
+                    </div>
+                    <div className="menu-item">
+                        <MemorySettingsIcon icon={Brain} color={BINDING_ACCENTS.memory} />
+                        <div className="menu-label-group">
+                            <span className="menu-label">自动性格漂移</span>
+                            <span className="menu-desc">默认关闭。打开后，空闲整理才可以把持续的性格变化写进下次聊天。关闭时已有变化不再注入对话。</span>
+                        </div>
+                        <div className="menu-right">
+                            <Toggle checked={config.autoPersonaDriftEnabled === true} onChange={(v) => {
+                                const next = { ...config, autoPersonaDriftEnabled: v };
                                 setConfig(next);
                                 saveMemoryConfig(next);
                             }} />
