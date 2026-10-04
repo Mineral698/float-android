@@ -165,9 +165,3 @@ GNU Affero General Public License v3.0 only（AGPL-3.0-only），详见 [LICENSE
 ## 致谢
 
 本项目基于 [xiaolongbao0709/ai-virtual-phone](https://github.com/xiaolongbao0709/ai-virtual-phone) 开发——原版是一个功能极其丰富的作品，这个分支的全部基础都来自它。如果你喜欢这个方向，请去给原作者的仓库点 Star 支持。
-
-产品设计中预设、正则、世界书等概念受 [SillyTavern](https://github.com/SillyTavern/SillyTavern) 启发（AGPL-3.0）。
-
-## 交流
-
-QQ 群：**1017278319**——反馈问题、许愿功能、交流玩法都欢迎。
