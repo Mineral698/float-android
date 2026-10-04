@@ -25,6 +25,15 @@ import { maybeRunConsolidation } from "./memory-consolidation";
 /** Per-character lock to prevent concurrent summarization. */
 const summarizingSet = new Set<string>();
 
+/**
+ * 写在用户可编辑总结提示词之后，不能被预设或世界书拿掉。
+ * 群聊素材已经按亲历过滤；这里再拦住模型把旁人的事改写成这个角色的经历。
+ */
+const PERSONAL_MEMORY_ATTRIBUTION_RULE = `归属约束（必须遵守）：
+- 只记录{{char}}自己做的事、说的话，以及别人直接对{{char}}说的、直接发生在{{char}}身上的事。
+- 群聊或其他场合里，别的角色自己的行动、生活细节和情绪不是{{char}}的经历。不要写进总结，也不要写成 EPISODE。
+- 不要把「某人做了某事」改写成{{char}}的记忆。素材里没写到{{char}}的事，就当没发生过。`;
+
 export type ParsedSummarizationOutput = {
     summary: string;
     episodes: { salience: number; content: string }[];
@@ -125,7 +134,10 @@ export async function runSummarizationPipeline(
     // 进度水位线取「过滤后」最后一条的时间，因此关掉的来源不会把水位线推过头，
     // 但已被水位线越过的内容重新打开后也不会回补——这一点在设置里已注明。
     const allEntries = filterTimelineByAllowedSources(
-        loadNativeTimeline(characterId, afterTimestamp ? { afterTimestamp } : undefined),
+        loadNativeTimeline(characterId, {
+            ...(afterTimestamp ? { afterTimestamp } : {}),
+            forPersonalMemory: true,
+        }),
         config.shortTermAllowedSources,
     );
 
@@ -145,11 +157,13 @@ export async function runSummarizationPipeline(
     if (promptTemplate === DEFAULT_SUMMARIZATION_PROMPT.trim()) {
         promptTemplate = DEFAULT_SUMMARIZATION_PROMPT_V2;
     }
-    const summaryPrompt = promptTemplate
+    const summaryPrompt = `${promptTemplate
         .replace(/\{\{char\}\}/gi, characterName)
         .replace(/\{\{earliest\}\}/gi, earliest)
         .replace(/\{\{latest\}\}/gi, latest)
-        .replace(/\{\{events\}\}/gi, eventsText);
+        .replace(/\{\{events\}\}/gi, eventsText)}
+
+${PERSONAL_MEMORY_ATTRIBUTION_RULE.replace(/\{\{char\}\}/gi, characterName)}`;
 
     // Call LLM for summarization — compatible with all providers
     const result = await simpleLLMCall(
