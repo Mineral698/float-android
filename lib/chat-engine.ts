@@ -908,6 +908,16 @@ export async function sendLLMStreamRequest(
     }
 }
 
+function loggedContentSize(content: string | LLMContentPart[]): number {
+    if (typeof content === "string") return content.length;
+    let size = 0;
+    for (const part of content) {
+        if (part.type === "text") size += part.text.length;
+        else if (typeof part.image_url?.url === "string") size += part.image_url.url.length;
+    }
+    return size;
+}
+
 /**
  * Shared LLM HTTP request: provider normalization → consecutive same-role merge → API call → log → output regex.
  * Used by both generateChatCompletion (1:1 chat) and generateGroupChatCompletion (group chat).
@@ -936,12 +946,9 @@ export async function sendLLMRequest(
     const requestMessages = toLlmRequestMessages(afterPlugins.messages);
     const request = buildProviderRequest(config, effectivePreset, requestMessages);
     publishDebugPromptSnapshot({ request, config, preset: effectivePreset, meta, options, requestKind: "completion" });
-    const requestBodyJson = JSON.stringify(request.body);
-    const requestBodySize = requestBodyJson.length;
+    const messageSizes = request.messagesForLog.map((message) => loggedContentSize(message.content));
+    const requestBodySize = messageSizes.reduce((sum, size) => sum + size, 0);
     const requestTokenEstimate = Math.ceil(requestBodySize / 3);
-    const messageSizes = request.messagesForLog.map((message) => (
-        typeof message.content === "string" ? message.content.length : JSON.stringify(message.content).length
-    ));
     const largestMessage = messageSizes.reduce(
         (largest, size, index) => (size > largest.size ? { index, size, role: request.messagesForLog[index]?.role ?? "" } : largest),
         { index: -1, size: 0, role: "" },
