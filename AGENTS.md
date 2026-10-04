@@ -99,7 +99,7 @@ The web core (`components/`, `lib/`, `entries/`, `styles/`) is shared and must s
 
 ## Workflow
 
-- Do not commit secrets, `local.properties`, `android/keystore.properties`, keystores (`*.keystore`), or IDE/cache junk. Signing material is gitignored — keep it that way.
+- Do not commit secrets, `local.properties`, `android/keystore.properties`, release keystores (`*.jks` and any release `*.keystore`), or IDE/cache junk. The one exception is `android/app/debug.keystore`: a public debug certificate so **Build Android Shell APK** artifacts share a signature and can upgrade each other. Never commit the release key.
 - Do not create commits, push, open PRs, or file Issues unless the user asks to deliver / ship / push / open a PR (or equivalent).
 - Verify before handing off: `npx tsc --noEmit` (strict; repo should stay at 0 errors), `npm run build`, and `./gradlew assembleDebug` or `assembleRelease` inside `android/` when native code changed. Emulator verification is preferred for bridge-level changes.
 
@@ -119,11 +119,11 @@ PR bodies follow `.github/pull_request_template.md` and must include `Fixes #N` 
 
 Releases are GitHub Releases built from `main`:
 
-1. Bump `versionName` in `android/app/build.gradle` and `version` in `package.json` to the new `X.Y.Z`; bump `versionCode` by 1 (Android treats upgrades by `versionCode`, the updater compares `versionName`).
-2. Build: `npm run build` → `npx cap sync android` → `cd android && ./gradlew assembleRelease` (signed via local `keystore.properties`, never committed).
-3. Publish: `gh release create vX.Y.Z float-android-X.Y.Z.apk --repo shiaho777/float-android --target main --title "Float vX.Y.Z" --notes "…"` — asset name is `float-android-X.Y.Z.apk` (lowercase `.apk` — updater builds pre-1.0.2 match it case-sensitively), tag is `vX.Y.Z` on `main`.
-4. To re-spin the same version (hot-fixing a just-published release), delete and recreate the release+tag at the new commit rather than pushing a moved tag silently: `gh release delete vX.Y.Z --cleanup-tag` then the same `gh release create` line.
+1. Bump `versionName` in `android/app/build.gradle` and `version` in `package.json` to the new `X.Y.Z`; bump `versionCode` by 1 (Android treats upgrades by `versionCode`; a debug build can replace the previous one only when this number goes up and the debug certificate matches).
+2. Publish a notes-only tag on `main`. Do not attach an APK: `gh release create vX.Y.Z --repo shiaho777/float-android --target main --title "Float vX.Y.Z" --notes "…"`.
+3. People install by forking and running **Build Android Shell APK** (see README). The artifact name is `float-shell-debug`. It is a debug APK signed with `android/app/debug.keystore`.
+4. To re-spin the same version, delete and recreate the release and tag at the new commit: `gh release delete vX.Y.Z --cleanup-tag`, then the same `gh release create` line, still with no APK asset.
 
-The in-app updater (设置 → 关于与声明) lists these releases and downloads the first `*.apk` asset — keep exactly one APK asset per release.
+The in-app updater (设置 → 关于与声明) only lists a release that has an `.apk` asset. Notes-only tags do not show up there. Do not add an APK asset to bring it back.
 
 iOS distribution is separate: Xcode Archive → TestFlight → App Store. There is no in-app updater on iOS (Apple Guideline 2.5.2); the About page hides the update center there. Keep `ios/` version (`MARKETING_VERSION`/`CURRENT_PROJECT_VERSION`) in step with the same `X.Y.Z` bump when shipping.
