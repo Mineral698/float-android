@@ -155,10 +155,10 @@ EPISODE|<重要性1-10>|<另一个事件>
 重要性评分标准：日常琐事=1-3，有意义的互动=4-7，关系里程碑/强烈情绪事件=8-10`;
 
 /**
- * Default core-memory summarization prompt template.
- * Placeholders: {{char}}, {{earliest}}, {{latest}}, {{events}}
+ * Stored default before the exclusion list was labeled. Those lines were
+ * being followed as things to write, including speculative content.
  */
-export const DEFAULT_CORE_MEMORY_PROMPT = `你是一个核心记忆整理助手。请根据以下长期记忆记录，为{{char}}整理一段“核心记忆”总结。
+export const LEGACY_CORE_MEMORY_PROMPT = `你是一个核心记忆整理助手。请根据以下长期记忆记录，为{{char}}整理一段“核心记忆”总结。
 
 角色：{{char}}
 时间跨度：{{earliest}} 至 {{latest}}
@@ -179,6 +179,46 @@ export const DEFAULT_CORE_MEMORY_PROMPT = `你是一个核心记忆整理助手�
 - 普通偏好信息
 - 任何不确定、推测性的内容
 - 用第三人称，事实性描述
+- 80-180字
+- 不要使用 JSON、列表符号、标题或格式标记
+
+核心记忆总结：`;
+
+/**
+ * Default core-memory summarization prompt template.
+ * Placeholders: {{char}}, {{earliest}}, {{latest}}, {{events}}, {{cardFacts}}
+ */
+export const DEFAULT_CORE_MEMORY_PROMPT = `你是一个核心记忆整理助手。请根据以下长期记忆记录，为{{char}}整理一段“核心记忆”总结。
+
+角色：{{char}}
+时间跨度：{{earliest}} 至 {{latest}}
+
+长期记忆记录：
+{{events}}
+
+人物卡（只用于核对，不要把卡里有、但长期记忆原文没有的经历写进来）：
+{{cardFacts}}
+
+要写入：
+- 最关键、最稳定、最影响关系判断的事实
+- 确认在一起 / 确认分手 / 复合
+- 订婚 / 结婚 / 离婚
+- 恋爱周年、结婚纪念日、在一起多久
+- 明确的长期关系身份（如恋人、前任、配偶）
+- 共同生活的重要里程碑（如同居、见家长、共同养宠物）
+
+不要写入：
+- 普通日常聊天
+- 一般情绪波动
+- 暂时性的矛盾或暧昧
+- 普通偏好信息
+- 任何不确定、推测出来的内容
+- 长期记忆原文里没有的年龄、起始岁数、起始年份、日期
+- 把持续时间写成起始年龄。原文是「坚持了十一年」「十一年的习惯」时，只能写持续了十一年，不能写成「从十一岁开始」
+- 和人物卡对不上的推算。卡上写了当前年龄时，不要写一个加上持续年数就会超过这个年龄的起始岁数
+
+写法：
+- 用第三人称，只写长期记忆原文里已经出现的事实
 - 80-180字
 - 不要使用 JSON、列表符号、标题或格式标记
 
