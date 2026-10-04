@@ -410,10 +410,10 @@ export function MemoryBankPage({
             const afterTimestamp = range === "all"
                 ? undefined
                 : sinceTimestamp ?? getLastSummarizedTimestamp(selectedCharId) ?? undefined;
-            const timelineCount = loadNativeTimeline(
-                selectedCharId,
-                afterTimestamp ? { afterTimestamp } : undefined,
-            ).length;
+            const timelineCount = loadNativeTimeline(selectedCharId, {
+                ...(afterTimestamp ? { afterTimestamp } : {}),
+                forPersonalMemory: true,
+            }).length;
             if (timelineCount < 4) {
                 showNotice("所选范围内事件不足 4 条");
                 return;
