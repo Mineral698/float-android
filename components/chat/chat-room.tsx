@@ -2705,7 +2705,7 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
     const hasKnownGroupSenderPrefix = (text: string) => {
         return groupCharacters.some((groupCharacter) => {
             const escapedName = groupCharacter.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-            return new RegExp(`^\\[${escapedName}\\]:\\s*`, "m").test(text);
+            return new RegExp(`^(?:\\[|【)?${escapedName}(?:\\]|】)?\\s*[:：]\\s*`, "m").test(text);
         });
     };
 
@@ -3240,6 +3240,9 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                     },
                 );
                 if (!isCurrentGeneration()) return;
+                if (results.length === 0) {
+                    showChatToast("群聊回复没有标出是谁说的，这条没有记到任何人身上");
+                }
                 await processGroupParts(results, setMessages, generationGuard, roundReasoning);
             } else {
                 let capturedReasoning: string | undefined;
@@ -3671,6 +3674,9 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
                     appTags: theaterMode ? ["group_chat"] : undefined,
                 });
                 if (!isCurrentGeneration()) return;
+                if (results.length === 0) {
+                    showChatToast("群聊回复没有标出是谁说的，这条没有记到任何人身上");
+                }
                 if (streamedImageReplacementTasks.length > 0) {
                     await Promise.allSettled(streamedImageReplacementTasks);
                     throwIfGenerationStopped(generationGuard);

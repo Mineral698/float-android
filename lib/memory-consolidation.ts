@@ -21,6 +21,8 @@ import { loadApiConfigs, loadBindingConfig, resolveAuxiliaryApiConfig, resolveBi
 import { generateEmbedding, resolveEmbeddingModel } from "./memory-embedding";
 import { simpleLLMCall } from "./api-helpers";
 import { applyTraitShift, loadPersonaState } from "./persona-state";
+import { loadCharacters } from "./character-storage";
+import { buildMemoryRoster, isForeignMemoryText } from "./group-memory-scope";
 
 /** 固化水位线无活动时多久强制跑一次（毫秒）；有活动时靠总结尾部触发 */
 const MIN_INTERVAL_MS = 6 * 60 * 60 * 1000;
@@ -232,6 +234,7 @@ export async function runConsolidation(
     const embeddingEnabled = Boolean(embeddingApiConfig && resolveEmbeddingModel(embeddingApiConfig!));
 
     const existingLongTerm = all.filter(e => e.type === "long_term");
+    const roster = buildMemoryRoster(loadCharacters(), characterId, characterName);
     const evidenceIdsFor = (idx: number[]): string[] =>
         idx.map(i => candidates[i - 1]?.id).filter((id): id is string => Boolean(id));
     const acceptedReflectionTexts: string[] = [];
@@ -245,6 +248,7 @@ export async function runConsolidation(
         const duplicateOf = [...existingLongTerm.map(entry => entry.content), ...acceptedReflectionTexts];
         if (duplicateOf.some(content => isNearDuplicateMemoryText(content, ref.content))) continue;
         if (evidenceTexts.some(content => isNearDuplicateMemoryText(content, ref.content))) continue;
+        if (isForeignMemoryText(ref.content, roster.selfNames, roster.otherNames)) continue;
         let embedding: number[] | undefined;
         if (embeddingEnabled) {
             try {
