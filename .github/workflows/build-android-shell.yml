@@ -50,14 +50,28 @@ jobs:
       - name: Build web bundle and sync Android
         run: npm run build:apk
 
-      - name: Assemble debug APK
+      - name: Assemble release APK
         working-directory: android
-        run: ./gradlew assembleDebug --no-daemon -Dorg.gradle.jvmargs=-Xmx4g
+        run: ./gradlew assembleRelease --no-daemon -Dorg.gradle.jvmargs=-Xmx4g
+
+      - name: Name release APK
+        id: apk
+        run: |
+          set -euo pipefail
+          version=$(awk -F'"' '/versionName[[:space:]]+"/ { print $2; exit }' android/app/build.gradle)
+          if [ -z "$version" ]; then
+            echo "versionName not found in android/app/build.gradle" >&2
+            exit 1
+          fi
+          mkdir -p dist
+          cp android/app/build/outputs/apk/release/app-release.apk "dist/float-android-${version}.apk"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "file=dist/float-android-${version}.apk" >> "$GITHUB_OUTPUT"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: float-shell-debug
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: float-android-${{ steps.apk.outputs.version }}
+          path: ${{ steps.apk.outputs.file }}
           if-no-files-found: error
           retention-days: 14
