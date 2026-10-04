@@ -1465,7 +1465,7 @@ export function MemoryBankPage({
                         <div className="menu-label-group">
                             <span className="menu-label">核心记忆总结提示词</span>
                             <span className="menu-desc">
-                                变量：{"{{char}}"} 角色、{"{{earliest}}"} 起始时间、{"{{latest}}"} 结束时间、{"{{events}}"} 长期记忆集合
+                                变量：{"{{char}}"} 角色、{"{{earliest}}"} 起始时间、{"{{latest}}"} 结束时间、{"{{events}}"} 长期记忆集合、{"{{cardFacts}}"} 人物卡核对摘录
                             </span>
                         </div>
                         {!isCoreDefault && (
