@@ -201,7 +201,8 @@ function normalizeUnitInterval(value: number | undefined, fallback: number): num
 }
 
 async function synthesizeElevenLabs(text: string, config: VoiceApiConfig): Promise<Blob | null> {
-    if (!config.apiKey) throw new Error("ElevenLabs API Key 未配置");
+    const apiKey = config.apiKey?.trim();
+    if (!apiKey) throw new Error("ElevenLabs API Key 未配置");
 
     const baseUrl = (config.baseUrl || "https://api.elevenlabs.io/v1").replace(/\/$/, "");
     const voiceId = (config.defaultVoice || "JBFqnCBsd6RMkjVDRZzb").trim();
@@ -219,7 +220,7 @@ async function synthesizeElevenLabs(text: string, config: VoiceApiConfig): Promi
         {
             method: "POST",
             headers: {
-                "xi-api-key": config.apiKey,
+                "xi-api-key": apiKey,
                 "Content-Type": "application/json",
                 Accept: "audio/mpeg",
             },
@@ -235,10 +236,23 @@ async function synthesizeElevenLabs(text: string, config: VoiceApiConfig): Promi
         const errText = await response.text().catch(() => "");
         let detail = errText.slice(0, 300);
         try {
-            const parsed = JSON.parse(errText) as { detail?: { message?: string } | string; message?: string };
+            const parsed = JSON.parse(errText) as {
+                detail?: { message?: string; status?: string; code?: string } | string;
+                message?: string;
+            };
             if (typeof parsed.detail === "string") detail = parsed.detail;
-            else if (parsed.detail && typeof parsed.detail === "object" && parsed.detail.message) {
-                detail = parsed.detail.message;
+            else if (parsed.detail && typeof parsed.detail === "object") {
+                const status = parsed.detail.status || parsed.detail.code || "";
+                const message = parsed.detail.message || "";
+                if (status === "missing_permissions") {
+                    detail = `${message || "API Key 权限不足"}（语音合成需要 text_to_speech 权限）`;
+                } else if (status === "invalid_api_key" || status === "unauthorized") {
+                    detail = message || "API Key 无效，请检查是否完整粘贴且无多余空格";
+                } else if (status === "voice_not_found") {
+                    detail = message || "Voice ID 不存在，请改用默认音色或手动填写正确的 Voice ID";
+                } else if (message) {
+                    detail = message;
+                }
             } else if (parsed.message) {
                 detail = parsed.message;
             }

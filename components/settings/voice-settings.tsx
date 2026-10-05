@@ -589,8 +589,10 @@ export function VoiceSettings() {
             } else if (config.provider === "OpenAI") {
                 setFetchedVoices(prev => ({ ...prev, [config.id]: DEFAULT_OPENAI_VOICES }));
             } else if (config.provider === "ElevenLabs") {
-                if (!config.apiKey.trim()) {
-                    setFetchedVoices(prev => ({ ...prev, [config.id]: uniqueOptions([...(config.customVoices || []), ...DEFAULT_ELEVENLABS_VOICES]) }));
+                const apiKey = config.apiKey.trim();
+                const defaults = uniqueOptions([...(config.customVoices || []), ...DEFAULT_ELEVENLABS_VOICES]);
+                if (!apiKey) {
+                    setFetchedVoices(prev => ({ ...prev, [config.id]: defaults }));
                     setFetchError(prev => ({ ...prev, [config.id]: "填写 API Key 后可同步账户音色列表" }));
                     return;
                 }
@@ -598,16 +600,34 @@ export function VoiceSettings() {
                 const response = await httpFetch(`${base}/voices`, {
                     method: "GET",
                     headers: {
-                        "xi-api-key": config.apiKey.trim(),
+                        "xi-api-key": apiKey,
                         Accept: "application/json",
                     },
                 });
                 const data = await response.json().catch(() => ({}));
                 if (!response.ok) {
-                    const detail = typeof data?.detail === "string"
+                    const status = typeof data?.detail === "object" ? String(data.detail?.status || data.detail?.code || "") : "";
+                    const message = typeof data?.detail === "string"
                         ? data.detail
                         : data?.detail?.message || data?.message || data?.error || `同步失败 (${response.status})`;
-                    throw new Error(String(detail));
+                    // Restricted keys often only have text_to_speech — listing voices needs voices_read.
+                    // Keep premade defaults so preview/TTS still works.
+                    setFetchedVoices(prev => ({ ...prev, [config.id]: defaults }));
+                    if (status === "missing_permissions" || /voices_read|missing.?permission/i.test(String(message))) {
+                        setFetchError(prev => ({
+                            ...prev,
+                            [config.id]: "当前 API Key 无 voices_read 权限，无法同步账户音色。可直接用下方默认音色试听；若要同步列表，请在 ElevenLabs 后台给 Key 勾选 Voices Read。",
+                        }));
+                        return;
+                    }
+                    if (status === "invalid_api_key") {
+                        setFetchError(prev => ({
+                            ...prev,
+                            [config.id]: "API Key 无效，请检查是否完整粘贴且无多余空格。",
+                        }));
+                        return;
+                    }
+                    throw new Error(String(message));
                 }
                 const rawVoices = Array.isArray(data?.voices) ? data.voices as Array<Record<string, unknown>> : [];
                 const accountVoices = rawVoices
@@ -625,7 +645,15 @@ export function VoiceSettings() {
         } catch (error: unknown) {
             const msg = error instanceof Error ? error.message : String(error);
             setFetchError(prev => ({ ...prev, [config.id]: msg }));
-            setFetchedVoices(prev => ({ ...prev, [config.id]: [] }));
+            // Keep provider defaults available after a failed sync so preview still works.
+            if (config.provider === "ElevenLabs") {
+                setFetchedVoices(prev => ({
+                    ...prev,
+                    [config.id]: uniqueOptions([...(config.customVoices || []), ...DEFAULT_ELEVENLABS_VOICES]),
+                }));
+            } else {
+                setFetchedVoices(prev => ({ ...prev, [config.id]: [] }));
+            }
         } finally {
             setIsFetching(prev => ({ ...prev, [config.id]: false }));
         }
@@ -794,8 +822,17 @@ export function VoiceSettings() {
                                                 type="password"
                                                 value={config.apiKey}
                                                 onChange={(e) => updateConfig(config.id, { apiKey: e.target.value })}
+                                                onBlur={(e) => {
+                                                    const trimmed = e.target.value.trim();
+                                                    if (trimmed !== config.apiKey) updateConfig(config.id, { apiKey: trimmed });
+                                                }}
                                                 placeholder="输入密钥..."
                                             />
+                                            {config.provider === "ElevenLabs" && (
+                                                <span className="menu-desc ml-1">
+                                                    粘贴后会自动去掉首尾空格。受限 Key 只要有 text_to_speech 即可试听；「同步音色列表」需要额外的 Voices Read 权限。
+                                                </span>
+                                            )}
                                         </div>
                                         {config.provider === "OpenAI" && (
                                             <>
