@@ -26,6 +26,7 @@ export function resolveVoiceConfig(characterId: string, appId?: ContentAppId): V
  * Supported providers:
  * - Minimax: REST API → hex-encoded mp3
  * - OpenAI: REST API → binary audio blob
+ * - ElevenLabs: REST API → binary audio blob (xi-api-key)
  */
 export async function synthesizeSpeech(
     text: string,
@@ -42,6 +43,10 @@ export async function synthesizeSpeech(
 
     if (provider === "OpenAI") {
         return synthesizeOpenAI(text, voiceConfig);
+    }
+
+    if (provider === "ElevenLabs") {
+        return synthesizeElevenLabs(text, voiceConfig);
     }
 
     return null;
@@ -172,6 +177,73 @@ async function synthesizeOpenAI(text: string, config: VoiceApiConfig): Promise<B
     if (!response.ok) {
         const errText = await response.text().catch(() => "");
         throw new Error(`OpenAI TTS 请求失败 (${response.status}): ${errText}`);
+    }
+
+    const blob = await response.blob();
+    return new Blob([await blob.arrayBuffer()], { type: "audio/mpeg" });
+}
+
+// ── ElevenLabs TTS ──────────────────────────────────
+
+const ELEVENLABS_SPEED_MIN = 0.7;
+const ELEVENLABS_SPEED_MAX = 1.2;
+const ELEVENLABS_STABILITY_DEFAULT = 0.5;
+const ELEVENLABS_SIMILARITY_DEFAULT = 0.75;
+
+function normalizeElevenLabsSpeed(speed: number | undefined): number | undefined {
+    if (typeof speed !== "number" || !Number.isFinite(speed)) return undefined;
+    return Math.min(ELEVENLABS_SPEED_MAX, Math.max(ELEVENLABS_SPEED_MIN, speed));
+}
+
+function normalizeUnitInterval(value: number | undefined, fallback: number): number {
+    if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
+    return Math.min(1, Math.max(0, value));
+}
+
+async function synthesizeElevenLabs(text: string, config: VoiceApiConfig): Promise<Blob | null> {
+    if (!config.apiKey) throw new Error("ElevenLabs API Key 未配置");
+
+    const baseUrl = (config.baseUrl || "https://api.elevenlabs.io/v1").replace(/\/$/, "");
+    const voiceId = (config.defaultVoice || "JBFqnCBsd6RMkjVDRZzb").trim();
+    if (!voiceId) throw new Error("ElevenLabs Voice ID 未配置");
+
+    const voiceSettings: Record<string, unknown> = {
+        stability: normalizeUnitInterval(config.stability, ELEVENLABS_STABILITY_DEFAULT),
+        similarity_boost: normalizeUnitInterval(config.similarityBoost, ELEVENLABS_SIMILARITY_DEFAULT),
+    };
+    const speed = normalizeElevenLabsSpeed(config.speechSpeed);
+    if (speed !== undefined) voiceSettings.speed = speed;
+
+    const response = await fetchWithTimeout(
+        `${baseUrl}/text-to-speech/${encodeURIComponent(voiceId)}?output_format=mp3_44100_128`,
+        {
+            method: "POST",
+            headers: {
+                "xi-api-key": config.apiKey,
+                "Content-Type": "application/json",
+                Accept: "audio/mpeg",
+            },
+            body: JSON.stringify({
+                text,
+                model_id: config.model || "eleven_multilingual_v2",
+                voice_settings: voiceSettings,
+            }),
+        },
+    );
+
+    if (!response.ok) {
+        const errText = await response.text().catch(() => "");
+        let detail = errText.slice(0, 300);
+        try {
+            const parsed = JSON.parse(errText) as { detail?: { message?: string } | string; message?: string };
+            if (typeof parsed.detail === "string") detail = parsed.detail;
+            else if (parsed.detail && typeof parsed.detail === "object" && parsed.detail.message) {
+                detail = parsed.detail.message;
+            } else if (parsed.message) {
+                detail = parsed.message;
+            }
+        } catch { /* keep raw text */ }
+        throw new Error(`ElevenLabs TTS 请求失败 (${response.status}): ${detail}`);
     }
 
     const blob = await response.blob();
