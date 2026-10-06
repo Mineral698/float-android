@@ -23,12 +23,14 @@ import androidx.core.app.NotificationCompat;
  * <ul>
  *   <li>类型用 specialUse（规避 Android 14/15 dataSync 6h/天上限）</li>
  *   <li>START_STICKY：被杀后系统尽量拉回</li>
- *   <li>省电模式：不长期持锁，靠心跳闹钟唤醒</li>
+ *   <li>省电模式：不长期持锁，靠心跳闹钟唤醒；心跳拍内持 3 分钟锁</li>
  *   <li>实时模式：PARTIAL_WAKE_LOCK + WifiLock</li>
  *   <li>引擎失联：JS ping 停 5 分钟 → 「点按恢复」高优通知</li>
  * </ul>
  */
 public class BackgroundKeepAliveService extends Service {
+
+    public static final String EXTRA_HEARTBEAT = "heartbeat";
 
     private static final String TAG = "BgKeepAliveSvc";
 
@@ -40,11 +42,17 @@ public class BackgroundKeepAliveService extends Service {
     /** JS 侧 ping 超过此时长未到 → 判定引擎失联 */
     private static final long ENGINE_STALE_MS = 5L * 60_000;
     private static final long STALE_CHECK_INTERVAL_MS = 60_000;
+    /** 心跳拍内唤醒，覆盖一轮后台 LLM/工具 */
+    private static final long HEARTBEAT_WAKE_MS = 3L * 60_000;
+    /** 服务已起但从未收到 ping 时的宽限（开机后等用户打开 App） */
+    private static final long NO_PING_GRACE_MS = 10L * 60_000;
 
     private PowerManager.WakeLock wakeLock;
+    private PowerManager.WakeLock heartbeatWakeLock;
     private WifiManager.WifiLock wifiLock;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private boolean recoveryPosted = false;
+    private long serviceStartedAt = 0L;
 
     private final Runnable staleCheck = new Runnable() {
         @Override
@@ -57,11 +65,14 @@ public class BackgroundKeepAliveService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        serviceStartedAt = System.currentTimeMillis();
         try {
             PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
             if (pm != null) {
                 wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "float:bg_keepalive");
                 wakeLock.setReferenceCounted(false);
+                heartbeatWakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "float:bg_heartbeat");
+                heartbeatWakeLock.setReferenceCounted(false);
             }
             WifiManager wm = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
             if (wm != null) {
@@ -74,6 +85,7 @@ public class BackgroundKeepAliveService extends Service {
         } catch (RuntimeException error) {
             Log.e(TAG, "locks unavailable", error);
             wakeLock = null;
+            heartbeatWakeLock = null;
             wifiLock = null;
         }
     }
@@ -95,7 +107,7 @@ public class BackgroundKeepAliveService extends Service {
                         ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
                 );
             } else if (Build.VERSION.SDK_INT >= 29) {
-                // specialUse 仅 API 34+；低版本用 dataSync 抬优先级
+                // specialUse 仅 API 34+；低版本用 dataSync（manifest 已声明 specialUse|dataSync）
                 startForeground(
                         NOTIFICATION_ID,
                         notification,
@@ -105,6 +117,14 @@ public class BackgroundKeepAliveService extends Service {
                 startForeground(NOTIFICATION_ID, notification);
             }
             applyModeLocks();
+            // 刷新常驻通知文案（模式切换后也会走到这里）
+            NotificationManager nm = getSystemService(NotificationManager.class);
+            if (nm != null) nm.notify(NOTIFICATION_ID, buildOngoingNotification());
+
+            if (intent != null && intent.getBooleanExtra(EXTRA_HEARTBEAT, false)) {
+                acquireHeartbeatWake();
+            }
+
             handler.removeCallbacks(staleCheck);
             handler.postDelayed(staleCheck, STALE_CHECK_INTERVAL_MS);
             return START_STICKY;
@@ -112,6 +132,23 @@ public class BackgroundKeepAliveService extends Service {
             Log.e(TAG, "foreground start failed", error);
             stopSelf();
             return START_NOT_STICKY;
+        }
+    }
+
+    private void acquireHeartbeatWake() {
+        // 实时模式已有长锁，不必叠心跳锁
+        if (BackgroundKeepAlivePrefs.MODE_REALTIME.equals(BackgroundKeepAlivePrefs.getMode(this))) {
+            return;
+        }
+        try {
+            if (heartbeatWakeLock != null) {
+                // 每次心跳重置超时窗口
+                if (heartbeatWakeLock.isHeld()) heartbeatWakeLock.release();
+                heartbeatWakeLock.acquire(HEARTBEAT_WAKE_MS);
+                Log.d(TAG, "heartbeat wake " + HEARTBEAT_WAKE_MS + "ms");
+            }
+        } catch (RuntimeException error) {
+            Log.e(TAG, "heartbeat wake failed", error);
         }
     }
 
@@ -138,11 +175,18 @@ public class BackgroundKeepAliveService extends Service {
     private void checkEngineStale() {
         if (!BackgroundKeepAlivePrefs.isEnabled(this)) return;
         long last = BackgroundKeepAlivePrefs.getLastPingAt(this);
+        long now = System.currentTimeMillis();
         if (last <= 0) {
-            // 刚启动尚未收到 ping：给引擎一点宽限，不立刻弹
+            // 开机后服务先起来、用户还没打开 App：给宽限，超时再提醒点按恢复
+            if (serviceStartedAt > 0 && now - serviceStartedAt >= NO_PING_GRACE_MS) {
+                if (!recoveryPosted) {
+                    recoveryPosted = true;
+                    postRecoveryNotification();
+                }
+            }
             return;
         }
-        long age = System.currentTimeMillis() - last;
+        long age = now - last;
         if (age < ENGINE_STALE_MS) {
             recoveryPosted = false;
             return;
@@ -231,6 +275,7 @@ public class BackgroundKeepAliveService extends Service {
         handler.removeCallbacks(staleCheck);
         try {
             if (wakeLock != null && wakeLock.isHeld()) wakeLock.release();
+            if (heartbeatWakeLock != null && heartbeatWakeLock.isHeld()) heartbeatWakeLock.release();
             if (wifiLock != null && wifiLock.isHeld()) wifiLock.release();
         } catch (RuntimeException error) {
             Log.e(TAG, "release locks failed", error);

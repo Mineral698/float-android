@@ -273,8 +273,8 @@ export async function notifyBackgroundMessage(notice: BackgroundMessageNotice): 
     };
 
     try {
-        // 先清旧的再排新的，实现「同一会话原地更新」
-        await clearDeliveredById(id);
+        // 同一 id 再 schedule 即原地更新（Cap LocalNotifications + setOnlyAlertOnce）
+        // 不再先 remove：清掉再发会丢掉 heads-up 动画，也多一次 bridge 往返
         await LocalNotifications.schedule({ notifications: [payload] });
     } catch (err) {
         console.warn("[NativeNotifications] schedule failed:", err);

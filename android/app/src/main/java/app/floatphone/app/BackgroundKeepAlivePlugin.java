@@ -1,5 +1,6 @@
 package app.floatphone.app;
 
+import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
@@ -79,6 +80,11 @@ public class BackgroundKeepAlivePlugin extends Plugin {
     @PluginMethod
     public void requestIgnoreBatteryOptimizations(PluginCall call) {
         Context ctx = getContext();
+        Activity activity = getActivity();
+        if (activity == null) {
+            call.reject("Activity unavailable");
+            return;
+        }
         try {
             Intent intent;
             if (isBatteryOptIgnored(ctx)) {
@@ -87,13 +93,11 @@ public class BackgroundKeepAlivePlugin extends Plugin {
                 intent = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
                 intent.setData(Uri.parse("package:" + ctx.getPackageName()));
             }
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            getActivity().startActivity(intent);
+            activity.startActivity(intent);
         } catch (RuntimeException e) {
             try {
                 Intent fallback = new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS);
-                fallback.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                getActivity().startActivity(fallback);
+                activity.startActivity(fallback);
             } catch (RuntimeException e2) {
                 Logger.warn("battery opt settings unavailable: " + e2.getMessage());
                 call.reject("无法打开电池优化设置");

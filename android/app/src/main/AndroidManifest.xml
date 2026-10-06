@@ -35,27 +35,26 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
-        <!-- 主动消息常驻保活：specialUse 规避 dataSync 6h/天上限；用户在设置里主动开启 -->
+        <!-- 主动消息常驻保活：API34+ 走 specialUse；API29-33 回落 dataSync（onStartCommand 按版本选 type） -->
         <service
             android:name=".BackgroundKeepAliveService"
             android:exported="false"
-            android:foregroundServiceType="specialUse">
+            android:foregroundServiceType="specialUse|dataSync">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Keep the local AI chat engine alive so scheduled proactive messages can generate and show system notifications while the app is backgrounded. Started only when the user enables background keep-alive in settings." />
         </service>
 
+        <!-- 心跳由 AlarmManager 显式 PendingIntent 触发，不导出 -->
         <receiver
             android:name=".HeartbeatReceiver"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="app.floatphone.app.ACTION_BG_KEEPALIVE_HEARTBEAT" />
-            </intent-filter>
-        </receiver>
+            android:exported="false" />
 
+        <!-- BOOT_COMPLETED 来自系统，必须 exported=true，否则开机恢复永不触发 -->
         <receiver
             android:name=".BootReceiver"
-            android:exported="false">
+            android:exported="true"
+            android:permission="android.permission.RECEIVE_BOOT_COMPLETED">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />

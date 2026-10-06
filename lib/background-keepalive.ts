@@ -9,6 +9,7 @@
 
 import { Capacitor, registerPlugin } from "@capacitor/core";
 
+import { bgSetInterval } from "./bg-timer";
 import {
     loadChatAppSettings,
     saveChatAppSettings,
@@ -69,16 +70,15 @@ function startPingLoop(): void {
         });
     };
     tick();
-    // 30s 一拍；不受「允许主动消息」总开关影响——有意闲置时仍要报存活
-    const id = window.setInterval(tick, 30_000);
-    pingStop = () => {
-        window.clearInterval(id);
-        pingStop = null;
-    };
+    // 必须用 bgSetInterval：退后台后主线程 setInterval 会被猛掐，
+    // 假死 5 分钟会误触发「点按恢复」。ping 不受主动消息总开关影响。
+    pingStop = bgSetInterval(tick, 30_000);
 }
 
 function stopPingLoop(): void {
-    if (pingStop) pingStop();
+    if (!pingStop) return;
+    pingStop();
+    pingStop = null;
 }
 
 /**
