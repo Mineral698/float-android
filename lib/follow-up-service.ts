@@ -18,6 +18,7 @@ import {
     createResponseBatchId,
     getLatestCharacterStateValues,
     applyAssistantPartGuards,
+    isProactiveMessagingEnabled,
 } from "./chat-storage";
 import type { ChatMessage, ChatSession, StateValue } from "./chat-storage";
 import { generateChatCompletion, flattenCompletionResult } from "./chat-engine";
@@ -41,6 +42,8 @@ import { isKnownStickerLabel } from "./sticker-data";
 import { loadCharacters } from "./character-storage";
 import { bgSetInterval, bgSetTimeout } from "./bg-timer";
 import { dispatchChatMessageNotice } from "./chat-notification-events";
+import { initBackgroundNotifications, notifyBackgroundMessage } from "./native-notifications";
+import { applyBackgroundKeepAlive, pingBackgroundKeepAlive } from "./background-keepalive";
 import { settleShoppingPaymentRequest } from "./shopping-payment-request";
 import {
     createPendingChatGeneratedImageData,
@@ -146,6 +149,9 @@ const MAX_FOLLOW_UPS = 10;
 const POLL_INTERVAL_MS = 3000; // check every 3 s
 const PERIOD_CARE_POLL_INTERVAL_MS = 60_000;
 const BACKGROUND_MESSAGE_STAGGER_MS = 800;
+// 引擎存活 ping 间隔：远疏于轮询本身，足以让服务在 1 分钟内察觉 WebView 死亡
+const KEEPALIVE_PING_INTERVAL_MS = 30_000;
+let lastKeepAlivePingAt = 0;
 
 function resolveFollowUpSenderName(sessionId: string): string {
     const sess = loadChatSessions().find(s => s.id === sessionId);
@@ -200,6 +206,8 @@ export function startFollowUpService() {
     if (stopInterval) return; // already running
     console.log("[FollowUp] Service started, polling every", POLL_INTERVAL_MS, "ms");
     stopInterval = bgSetInterval(pollSchedules, POLL_INTERVAL_MS);
+    void initBackgroundNotifications();
+    void applyBackgroundKeepAlive();
     if (typeof window !== "undefined") {
         periodCareUpdateHandler = () => {
             lastPeriodCarePollAt = 0;
@@ -304,6 +312,17 @@ export function cancelFollowUp(sessionId: string) {
     }
 }
 
+/** 「允许主动消息」总开关关闭时调用：清空待触发的追问与定时排程，避免重新
+ *  打开后积压的一次性任务全部冒出来。设置项本身由调用方写入 ChatAppSettings。 */
+export function clearPendingProactiveSchedules(): void {
+    for (const sched of loadAllFollowUpSchedules()) {
+        clearFollowUpSchedule(sched.sessionId);
+    }
+    for (const sched of loadTimedWakeSchedules()) {
+        removeTimedWakeSchedule(sched.id);
+    }
+}
+
 // ── Internals ──────────────────────────────────────────────
 
 function delay(ms: number): Promise<void> {
@@ -397,6 +416,16 @@ async function saveBackgroundCompletionRounds(
 
 function pollSchedules() {
     try {
+        // 引擎存活 ping：不受总开关影响——保活开着而主动消息关闭时，引擎虽然空转
+        // 也必须报活，否则服务会把“有意闲置”误判成 WebView 死亡而乱弹恢复提醒
+        const pingNow = Date.now();
+        if (pingNow - lastKeepAlivePingAt >= KEEPALIVE_PING_INTERVAL_MS) {
+            lastKeepAlivePingAt = pingNow;
+            pingBackgroundKeepAlive();
+        }
+        // 「允许主动消息」总开关：关闭时引擎空转等待，不触发任何主动行为，
+        // 也不清闹钟/服务（保活独立运行，重开开关立即生效）。
+        if (!isProactiveMessagingEnabled()) return;
         const schedules = loadAllFollowUpSchedules();
         const now = Date.now();
         // 安静时段：所有"角色主动"类任务（追问/定时唤醒/经期关怀/冷场重连）都暂停，
@@ -1296,6 +1325,13 @@ export async function parseAndSaveResponse(
                     ...(isGroup ? { isGroup: true } : {}),
                 });
                 sendBrowserNotification(charName, { body: partBody(part).slice(0, 60), icon: avatar || undefined });
+                // Android 原生系统通知（WebView 不渲染 Web Notification，后台弹窗走这条）；
+                // 同会话原地折叠，App 在前台时包装层内部直接跳过
+                void notifyBackgroundMessage({
+                    sessionId,
+                    title: charName,
+                    body: partBody(part),
+                });
             }, index * BACKGROUND_MESSAGE_STAGGER_MS);
         });
     }

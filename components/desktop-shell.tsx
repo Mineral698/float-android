@@ -102,6 +102,7 @@ import { generateChatCompletion, flattenCompletionResult } from "@/lib/chat-engi
 import { parseAIResponse } from "@/lib/rich-message-parser";
 import { requestBackgroundChatReply, scheduleFollowUp } from "@/lib/follow-up-service";
 import { CHAT_MESSAGE_NOTICE_EVENT, CHAT_OPEN_SESSION_EVENT, type ChatMessageNoticeDetail } from "@/lib/chat-notification-events";
+import { NOTIFICATION_OPEN_SESSION_EVENT } from "@/lib/native-notifications";
 import { startIncomingCallVibration } from "@/lib/call-vibration";
 import { installChatSoundListener, playChatSoundOnce, setMiniChatSoundSessionId, startChatSoundLoop } from "@/lib/chat-sound";
 import { setMascotContext } from "@/lib/mascot-context";
@@ -2444,19 +2445,30 @@ html,body{margin:0;padding:0;width:100%;height:100%;background:#121110;color:rgb
     return () => window.removeEventListener("open-mini-chat", handler);
   }, []);
 
-  const openChatSessionFromNotice = useCallback((sessionId: string) => {
-    if (chatMessageNoticeTimerRef.current !== null) {
-      window.clearTimeout(chatMessageNoticeTimerRef.current);
-      chatMessageNoticeTimerRef.current = null;
-    }
-    setChatMessageNotice(null);
-    setShowMiniChat(false);
-    setActiveApp("chat" as IconId);
-    setChatInitSessionId(sessionId);
-    window.setTimeout(() => {
-      window.dispatchEvent(new CustomEvent(CHAT_OPEN_SESSION_EVENT, { detail: { sessionId } }));
-    }, 0);
-  }, []);
+    const openChatSessionFromNotice = useCallback((sessionId: string) => {
+        if (chatMessageNoticeTimerRef.current !== null) {
+            window.clearTimeout(chatMessageNoticeTimerRef.current);
+            chatMessageNoticeTimerRef.current = null;
+        }
+        setChatMessageNotice(null);
+        setShowMiniChat(false);
+        setActiveApp("chat" as IconId);
+        setChatInitSessionId(sessionId);
+        window.setTimeout(() => {
+            window.dispatchEvent(new CustomEvent(CHAT_OPEN_SESSION_EVENT, { detail: { sessionId } }));
+        }, 0);
+    }, []);
+
+    // Android 系统通知点按：复用 App 内横幅的同一条打开链路（切到聊天 + 定位会话）
+    useEffect(() => {
+        const handler = (e: Event) => {
+            const sessionId = (e as CustomEvent<{ sessionId?: string }>).detail?.sessionId;
+            if (!sessionId) return;
+            openChatSessionFromNotice(sessionId);
+        };
+        window.addEventListener(NOTIFICATION_OPEN_SESSION_EVENT, handler);
+        return () => window.removeEventListener(NOTIFICATION_OPEN_SESSION_EVENT, handler);
+    }, [openChatSessionFromNotice]);
 
   useEffect(() => {
     const handler = (e: Event) => {

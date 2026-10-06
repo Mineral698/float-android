@@ -34,6 +34,27 @@
             android:name=".GenerationKeepAliveService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+
+        <!-- 后台常驻保活（用户显式开启）：specialUse 类型规避 Android 14/15 对
+             dataSync 的 6 小时/天上限；subtype 说明用途供系统记录 -->
+        <service
+            android:name=".BackgroundKeepAliveService"
+            android:exported="false"
+            android:stopWithTask="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Keep the chat proactive-message engine (WebView) alive while the app is backgrounded" />
+        </service>
+
+        <!-- 省电模式心跳：闹钟唤醒 CPU 让引擎跑一拍；one-shot 自续 -->
+        <receiver android:name=".HeartbeatReceiver" android:exported="false" />
+        <!-- 开机后按保活设置恢复闹钟与服务 -->
+        <receiver android:name=".BootReceiver" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
     </application>
 
     <!-- Permissions -->
@@ -49,6 +70,11 @@
     <!-- 生成任务后台保活：前台服务 + WiFi 锁 -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- 后台常驻保活：specialUse 前台服务 + 心跳/开机广播 + 恢复提醒全屏意图 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />

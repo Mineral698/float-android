@@ -13,13 +13,17 @@ import {
 } from "@/lib/settings-storage";
 import { loadPushQuietHours, savePushQuietHours } from "@/lib/quiet-hours";
 import { fileToUserAvatarDataUrl } from "@/lib/user-avatar-image";
-import { loadChatAppSettings, saveChatAppSettings } from "@/lib/chat-storage";
+import { loadChatAppSettings, saveChatAppSettings, isProactiveMessagingEnabled } from "@/lib/chat-storage";
 import type { UserIdentity } from "@/components/settings/user-identity";
 import { getApiLogs, clearApiLogs, type DebugInfo } from "@/lib/chat-engine";
 import type { FollowUpConfig } from "@/lib/settings-storage";
 import { PageShell } from "@/components/ui/page-shell";
 import { CHAT_APP_CSS_EXAMPLE } from "@/lib/css-examples";
 import { Toggle } from "@/components/ui/form";
+import { ConfirmDialog } from "@/components/ui/modal";
+import { clearPendingProactiveSchedules } from "@/lib/follow-up-service";
+import { getBackgroundKeepAliveRunning, isKeepAlivePlatform } from "@/lib/background-keepalive";
+import { KeepAliveSettingsPage } from "./keep-alive-settings";
 import { StickerManager } from "./sticker-manager";
 import { ChatPluginManager } from "./chat-plugin-manager";
 import { ChatPluginPageBoundary } from "./chat-plugin-page-boundary";
@@ -57,6 +61,7 @@ import {
     Moon,
     Satellite,
     Send,
+    ShieldCheck,
     X,
     SlidersHorizontal,
     Sticker,
@@ -164,6 +169,10 @@ export function UserProfilePanel({ onClose, className }: UserProfilePanelProps) 
     const [notifChecking, setNotifChecking] = useState(false);
     const [showPushSettings, setShowPushSettings] = useState(false);
     const [showGlobalChatInfo, setShowGlobalChatInfo] = useState(false);
+    const [showKeepAliveSettings, setShowKeepAliveSettings] = useState(false);
+    const [proactiveEnabled, setProactiveEnabled] = useState(() => isProactiveMessagingEnabled());
+    const [keepAliveStatusText, setKeepAliveStatusText] = useState("未开启");
+    const [confirmDisableProactive, setConfirmDisableProactive] = useState(false);
     const profileAvatarInputRef = useRef<HTMLInputElement>(null);
     const [enterToSendEnabled, setEnterToSendEnabled] = useState(false);
     const [callVibrationEnabled, setCallVibrationEnabled] = useState(true);
@@ -280,11 +289,43 @@ export function UserProfilePanel({ onClose, className }: UserProfilePanelProps) 
         saveChatAppSettings({ ...loadChatAppSettings(), callVibrationEnabled: enabled });
     };
 
+    const refreshKeepAliveStatus = () => {
+        if (!isKeepAlivePlatform()) {
+            setKeepAliveStatusText("当前平台不支持");
+            return;
+        }
+        if (loadChatAppSettings().keepAliveEnabled !== true) {
+            setKeepAliveStatusText("未开启");
+            return;
+        }
+        const mode = loadChatAppSettings().keepAliveMode === "realtime" ? "实时模式" : "省电模式";
+        void getBackgroundKeepAliveRunning().then(running => {
+            setKeepAliveStatusText(running ? `${mode}运行中` : `${mode}（服务未运行）`);
+        });
+    };
+
+    useEffect(() => { refreshKeepAliveStatus(); }, [showKeepAliveSettings]);
+
+    const applyProactiveEnabled = (enabled: boolean) => {
+        setProactiveEnabled(enabled);
+        saveChatAppSettings({ ...loadChatAppSettings(), proactiveMessagesEnabled: enabled });
+        if (!enabled) clearPendingProactiveSchedules();
+    };
+
+    const handleProactiveToggle = (enabled: boolean) => {
+        // 关闭需要确认：会一并清空已排期的定时消息与追问
+        if (!enabled) { setConfirmDisableProactive(true); return; }
+        applyProactiveEnabled(true);
+    };
+
     if (showFollowUpEditor) {
         return <FollowUpSettingsEditor onBack={() => { window.dispatchEvent(new CustomEvent("chat-hide-tabbar", { detail: false })); setShowFollowUpEditor(false); }} />;
     }
     if (showPushSettings) {
         return <OfflinePushSettingsPage onBack={() => { window.dispatchEvent(new CustomEvent("chat-hide-tabbar", { detail: false })); setShowPushSettings(false); }} />;
+    }
+    if (showKeepAliveSettings) {
+        return <KeepAliveSettingsPage onBack={() => { window.dispatchEvent(new CustomEvent("chat-hide-tabbar", { detail: false })); setShowKeepAliveSettings(false); }} />;
     }
     if (showGlobalChatInfo) {
         return <GlobalChatInfoSettings onBack={() => { window.dispatchEvent(new CustomEvent("chat-hide-tabbar", { detail: false })); setShowGlobalChatInfo(false); }} />;
@@ -314,6 +355,15 @@ export function UserProfilePanel({ onClose, className }: UserProfilePanelProps) 
 
     return (
         <>
+            <ConfirmDialog
+                title="关闭主动消息？"
+                message="关闭后角色不再主动发消息，已排期的定时消息和追问会一并取消；你发消息时 TA 仍会正常回复。"
+                variant="action"
+                confirmLabel="确认关闭"
+                cancelLabel="取消"
+                onConfirm={() => { setConfirmDisableProactive(false); applyProactiveEnabled(false); }}
+                onCancel={() => setConfirmDisableProactive(false)}
+            />
             <style>{`
                 .user-profile-page-root {
                     background: var(--c-page-body-bg) !important;
@@ -460,7 +510,23 @@ export function UserProfilePanel({ onClose, className }: UserProfilePanelProps) 
                     {/* 主动消息 */}
                     <div className="mx-4 mb-4 bg-[var(--c-card)] rounded-2xl px-4 py-1 flex flex-col"
                          style={{ boxShadow: "0 8px 24px rgba(0,0,0,0.025)" }}>
-                        <button className="flex items-center gap-3 py-3.5 w-full" onClick={() => { window.dispatchEvent(new CustomEvent("chat-hide-tabbar", { detail: true })); setShowFollowUpEditor(true); }}>
+                        <div className="flex items-center gap-3 py-3.5 w-full">
+                            <Send size={18} className="text-[var(--c-icon)] opacity-70" strokeWidth={1.25}/>
+                            <div className="flex flex-col flex-1 text-left gap-0.5">
+                                <span className="ts-14 font-semibold text-[var(--c-text-title)]">允许主动消息</span>
+                                <span className="ts-11 text-[var(--c-text)] opacity-70">关闭后角色不再主动发消息/朋友圈/群聊，回复不受影响</span>
+                            </div>
+                            <Toggle checked={proactiveEnabled} onChange={handleProactiveToggle} />
+                        </div>
+                        <button className={`flex items-center gap-3 py-3.5 w-full border-t border-[color-mix(in_srgb,var(--c-card-border)_20%,transparent)] ${proactiveEnabled ? "" : "opacity-40 pointer-events-none"}`} onClick={() => { window.dispatchEvent(new CustomEvent("chat-hide-tabbar", { detail: true })); setShowKeepAliveSettings(true); }}>
+                            <ShieldCheck size={18} className="text-[var(--c-icon)] opacity-70" strokeWidth={1.25}/>
+                            <div className="flex flex-col flex-1 text-left gap-0.5">
+                                <span className="ts-14 font-semibold text-[var(--c-text-title)]">后台保活</span>
+                                <span className="ts-11 text-[var(--c-text)] opacity-70">{keepAliveStatusText}；切后台/锁屏也能收到主动消息弹窗</span>
+                            </div>
+                            <ChevronRight size={16} className="text-[var(--c-icon)] opacity-50" />
+                        </button>
+                        <button className={`flex items-center gap-3 py-3.5 w-full border-t border-[color-mix(in_srgb,var(--c-card-border)_20%,transparent)] ${proactiveEnabled ? "" : "opacity-40 pointer-events-none"}`} onClick={() => { window.dispatchEvent(new CustomEvent("chat-hide-tabbar", { detail: true })); setShowFollowUpEditor(true); }}>
                             <Send size={18} className="text-[var(--c-icon)] opacity-70" strokeWidth={1.25}/>
                             <div className="flex flex-col flex-1 text-left gap-0.5">
                                 <span className="ts-14 font-semibold text-[var(--c-text-title)]">追发规则与延迟控制</span>
@@ -468,7 +534,7 @@ export function UserProfilePanel({ onClose, className }: UserProfilePanelProps) 
                             </div>
                             <ChevronRight size={16} className="text-[var(--c-icon)] opacity-50" />
                         </button>
-                        <button className="flex items-center gap-3 py-3.5 w-full" onClick={() => { window.dispatchEvent(new CustomEvent("chat-hide-tabbar", { detail: true })); setShowPushSettings(true); }}>
+                        <button className={`flex items-center gap-3 py-3.5 w-full border-t border-[color-mix(in_srgb,var(--c-card-border)_20%,transparent)] ${proactiveEnabled ? "" : "opacity-40 pointer-events-none"}`} onClick={() => { window.dispatchEvent(new CustomEvent("chat-hide-tabbar", { detail: true })); setShowPushSettings(true); }}>
                             <Satellite size={18} className="text-[var(--c-icon)] opacity-70" strokeWidth={1.25}/>
                             <div className="flex flex-col flex-1 text-left gap-0.5">
                                 <span className="ts-14 font-semibold text-[var(--c-text-title)]">定时主动消息</span>
@@ -476,7 +542,7 @@ export function UserProfilePanel({ onClose, className }: UserProfilePanelProps) 
                             </div>
                             <ChevronRight size={16} className="text-[var(--c-icon)] opacity-50" />
                         </button>
-                        <button className="flex items-center gap-3 py-3.5 w-full border-t border-[color-mix(in_srgb,var(--c-card-border)_20%,transparent)]" onClick={() => { window.dispatchEvent(new CustomEvent("chat-hide-tabbar", { detail: true })); setShowGlobalChatInfo(true); }}>
+                        <button className={`flex items-center gap-3 py-3.5 w-full border-t border-[color-mix(in_srgb,var(--c-card-border)_20%,transparent)] ${proactiveEnabled ? "" : "opacity-40 pointer-events-none"}`} onClick={() => { window.dispatchEvent(new CustomEvent("chat-hide-tabbar", { detail: true })); setShowGlobalChatInfo(true); }}>
                             <SlidersHorizontal size={18} className="text-[var(--c-icon)] opacity-70" strokeWidth={1.25}/>
                             <div className="flex flex-col flex-1 text-left gap-0.5">
                                 <span className="ts-14 font-semibold text-[var(--c-text-title)]">全局聊天信息</span>
