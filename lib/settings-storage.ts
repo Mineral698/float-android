@@ -986,6 +986,7 @@ export function removeApiConfigReferences(apiConfigId: string): void {
         "mascotApiConfigId",
         "qaApiConfigId",
         "reasoningTranslateApiConfigId",
+        "toolCallApiConfigId",
     ] as const;
     for (const field of auxFields) {
         if (next[field] === apiConfigId) {
@@ -1086,6 +1087,18 @@ export function resolveAuxiliaryApiConfig(
         return apiConfigs.find(c => c.id === config.globalDefaults.apiConfigId) ?? null;
     }
     return null;
+}
+
+/**
+ * Resolve the explicitly bound external tool-call API config (外部工具调用).
+ * Unlike resolveAuxiliaryApiConfig there is deliberately NO fallback: unset (or
+ * dangling) means tool rounds follow whatever model the chat session resolves,
+ * including character/app-level bindings that differ from the global default.
+ */
+export function resolveToolCallApiConfig(): ApiConfig | null {
+    const config = loadBindingConfig();
+    if (!config.toolCallApiConfigId) return null;
+    return loadApiConfigs().find(c => c.id === config.toolCallApiConfigId) ?? null;
 }
 
 // --- Migration from legacy CharacterSettingsOverride ---

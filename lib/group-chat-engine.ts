@@ -51,6 +51,7 @@ import {
     loadWorldBooks,
     loadRegexes,
     resolveUserIdentity,
+    resolveToolCallApiConfig,
 } from "./settings-storage";
 import {
     assembleGroupPromptPayload,
@@ -679,10 +680,12 @@ async function runNativeGroupToolLoop(params: {
     const expandableSourceKeys = new Set(enabledTools.filter(tool => !isNativeSingleTool(tool)).map(nativeToolSourceKey));
     let finalRawOutput = "";
 
+    // 外部工具调用单独绑定模型：round 0 是带工具定义的普通回复；round 1+ 都是因执行工具而发起的请求
+    const toolCallApiConfig = resolveToolCallApiConfig();
     for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
         let result: Awaited<ReturnType<typeof sendLLMToolRequest>>;
         try {
-            result = await sendLLMToolRequest(config, preset, requestMessages, nativeBundle.definitions, regexes, meta, {
+            result = await sendLLMToolRequest(round > 0 && toolCallApiConfig ? toolCallApiConfig : config, preset, requestMessages, nativeBundle.definitions, regexes, meta, {
                 appId: "group_chat",
                 appTags,
                 debugSessionId: session.id,
@@ -903,10 +906,12 @@ export async function generateGroupChatCompletion(
         return llmMessages.length;
     };
 
+    // 外部工具调用单独绑定模型：round 0 是普通聊天回复；round 1+ 都是因执行工具而发起的请求
+    const toolCallApiConfig = resolveToolCallApiConfig();
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
         let filteredOutput: string;
         try {
-            filteredOutput = await sendLLMRequest(config, preset, llmMessages, regexes, meta, {
+            filteredOutput = await sendLLMRequest(round > 0 && toolCallApiConfig ? toolCallApiConfig : config, preset, llmMessages, regexes, meta, {
                 appId: "group_chat",
                 appTags,
                 debugSessionId: session.id,
@@ -1055,7 +1060,7 @@ export async function generateGroupChatCompletion(
 
             if (round === MAX_TOOL_ROUNDS - 1) {
                 try {
-                    finalRawOutput = await sendLLMRequest(config, preset, llmMessages, regexes, meta, {
+                    finalRawOutput = await sendLLMRequest(round > 0 && toolCallApiConfig ? toolCallApiConfig : config, preset, llmMessages, regexes, meta, {
                         appId: "group_chat",
                         appTags,
                         debugSessionId: session.id,

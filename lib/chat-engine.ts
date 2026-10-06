@@ -37,6 +37,7 @@ import {
     loadWorldBooks,
     loadRegexes,
     resolveUserIdentity,
+    resolveToolCallApiConfig,
 } from "./settings-storage";
 import { assemblePromptPayload, applyOutputRegex, type LLMMessage, type LLMContentPart } from "./llm-prompt-assembler";
 import { MacroEngine, postProcessTrim } from "./macro-engine";
@@ -2199,11 +2200,13 @@ async function generateNativeChatCompletion(
     const expandableSourceKeys = new Set(enabledTools.filter(tool => !isNativeSingleTool(tool)).map(nativeToolSourceKey));
 
     const maxToolRounds = getMaxToolRounds();
+    // 外部工具调用单独绑定模型：round 0 是带工具定义的普通回复；round 1+ 都是因执行工具而发起的请求
+    const toolCallApiConfig = resolveToolCallApiConfig();
     for (let round = 0; round < maxToolRounds; round += 1) {
         let result: LLMToolRequestResult;
         try {
             result = await sendLLMToolRequest(
-                config,
+                round > 0 && toolCallApiConfig ? toolCallApiConfig : config,
                 preset,
                 requestMessages,
                 nativeBundle.definitions,
@@ -2450,19 +2453,27 @@ async function generateChatCompletionCore(
     const parts: ChatCompletionPart[] = [];
     const meta = { characterName: character.name, userName: userIdentity?.name };
     const actionContext = { characterId: session.contactId, sessionId: session.id, sourceEngine: "chat" as const, signal: options?.signal };
+    // 外部工具调用单独绑定模型：round 0 是普通聊天回复；round 1+ 都是因执行工具而发起的请求
+    const toolCallApiConfig = resolveToolCallApiConfig();
 
     const maxToolRounds = getMaxToolRounds();
     for (let round = 0; round < maxToolRounds; round++) {
         let filteredOutput: string;
         try {
-            filteredOutput = await sendLLMRequest(config, preset, llmMessages, regexes, meta, {
-                appId: options?.appId ?? "chat",
-                appTags: requestAppTags,
-                followUpCount: options?.followUpCount,
-                debugSessionId: session.id,
-                signal: options?.signal,
-                onReasoning: callbacks?.onReasoning,
-            });
+            filteredOutput = await sendLLMRequest(
+                round > 0 && toolCallApiConfig ? toolCallApiConfig : config,
+                preset,
+                llmMessages,
+                regexes,
+                meta,
+                {
+                    appId: options?.appId ?? "chat",
+                    appTags: requestAppTags,
+                    followUpCount: options?.followUpCount,
+                    debugSessionId: session.id,
+                    signal: options?.signal,
+                    onReasoning: callbacks?.onReasoning,
+                });
         } catch (err) {
             const errMsg = `⚠️ 回复生成失败: ${err instanceof Error ? err.message : String(err)}`;
             if (parts.length > 0) {
@@ -2620,7 +2631,7 @@ async function generateChatCompletionCore(
             // Last round — one final call
             if (round === maxToolRounds - 1) {
                 try {
-                    const finalOutput = await sendLLMRequest(config, preset, llmMessages, regexes, meta, {
+                    const finalOutput = await sendLLMRequest(round > 0 && toolCallApiConfig ? toolCallApiConfig : config, preset, llmMessages, regexes, meta, {
                         appId: options?.appId ?? "chat",
                         appTags: requestAppTags,
                         followUpCount: options?.followUpCount,

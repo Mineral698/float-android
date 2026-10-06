@@ -310,6 +310,8 @@ export type BindingConfig = {
     qaApiConfigId?: string;
     /** Auxiliary API: used to translate reasoning/chain-of-thought text (global, not per-character) */
     reasoningTranslateApiConfigId?: string;
+    /** Auxiliary API: used for external tool-call rounds (MCP/REST/composite) in chat; unset = follow the main model (global, not per-character) */
+    toolCallApiConfigId?: string;
 };
 
 // --- Chat Toolbox ---
