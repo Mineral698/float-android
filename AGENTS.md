@@ -72,7 +72,7 @@ The web core (`components/`, `lib/`, `entries/`, `styles/`) is shared and must s
 **Rules:**
 
 1. **Every capability must have defined behavior on both platforms** — either a real implementation or a deliberate, documented graceful degradation. "Silently does nothing" or "throws `not implemented`" is not a degradation path.
-2. **Platform gates live inside the `lib/` wrapper modules** (`native-http`, `native-media`, `native-notifications`, `keep-alive`, `storage-access`, `media-permissions`, `app-updater`). Callers stay platform-agnostic; never scatter `getPlatform()` checks through business code, and never call an Android-only plugin unguarded.
+2. **Platform gates live inside the `lib/` wrapper modules** (`native-http`, `native-media`, `native-notifications`, `background-keepalive`, `keep-alive`, `storage-access`, `media-permissions`, `app-updater`). Callers stay platform-agnostic; never scatter `getPlatform()` checks through business code, and never call an Android-only plugin unguarded.
 3. **Gate with `Capacitor.getPlatform()`, never `Capacitor.isNativePlatform()`** — iOS is also "native", so `isNativePlatform()` is always wrong as an Android check. On iOS an unregistered plugin returns a proxy whose calls reject with "not implemented"; the correct pattern is `getPlatform() === "android"` so iOS falls through to the wrapper's web fallback.
 4. **When you touch a plugin contract, update the matrix below** and state the iOS behavior in the PR.
 
@@ -83,6 +83,7 @@ The web core (`components/`, `lib/`, `entries/`, `styles/`) is shared and must s
 | `native-http` (`NativeHttp`) | OkHttp SSE streaming | `fetch` fallback | `fetch`. The API must allow the site origin |
 | `native-media` (`NativeMedia`) | Native disk store, `media-store://` refs | IndexedDB blob fallback | IndexedDB blob fallback |
 | `native-notifications` (`LocalNotifications`) | System heads-up via `@capacitor/local-notifications`; session fold; foreground suppressed (in-app banner instead) | Same plugin path (system banner); generation still pauses while backgrounded | Browser `Notification` API via `lib/browser-notification.ts` |
+| `background-keepalive` (`BackgroundKeepAlive`) | Persistent `specialUse` FGS + heartbeat alarm + engine ping; optional battery-opt exemption; swipe-away → “tap to recover” | No-op — iOS forbids fake keep-alive; proactive generation needs the app foregrounded | No-op — tab must stay open |
 | `keep-alive` (`GenerationKeepAlive`) | Foreground service + WakeLock | No-op — iOS suspends background tasks; generation requires the app in the foreground | No-op — generation runs while the tab is open |
 | `storage-access` (`StorageAccess`) | MANAGE_EXTERNAL_STORAGE → public Documents | Always "granted"; exports live in the app sandbox / share sheet | Unused. Exports use a download or the system share sheet |
 | `auto-backup` | Public Documents, keep 3 zips | App Documents via Capacitor Filesystem, keep 3 zips | Directory handle when the browser has one; otherwise manual export |

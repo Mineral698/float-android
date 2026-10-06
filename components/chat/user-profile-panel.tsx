@@ -13,7 +13,18 @@ import {
 } from "@/lib/settings-storage";
 import { loadPushQuietHours, savePushQuietHours } from "@/lib/quiet-hours";
 import { fileToUserAvatarDataUrl } from "@/lib/user-avatar-image";
-import { loadChatAppSettings, saveChatAppSettings } from "@/lib/chat-storage";
+import {
+    isProactiveMessagingEnabled,
+    loadChatAppSettings,
+    saveChatAppSettings,
+} from "@/lib/chat-storage";
+import { clearPendingProactiveSchedules } from "@/lib/follow-up-service";
+import {
+    getBackgroundKeepAliveStatus,
+    isBackgroundKeepAliveSupported,
+    peekBackgroundKeepAliveStatus,
+} from "@/lib/background-keepalive";
+import { KeepAliveSettingsPage } from "./keep-alive-settings";
 import type { UserIdentity } from "@/components/settings/user-identity";
 import { getApiLogs, clearApiLogs, type DebugInfo } from "@/lib/chat-engine";
 import type { FollowUpConfig } from "@/lib/settings-storage";
@@ -53,6 +64,7 @@ import {
     EyeOff,
     FileCode2,
     Heart,
+    HeartPulse,
     MessageSquare,
     MessageSquareDashed,
     Palette,
@@ -171,7 +183,10 @@ export function UserProfilePanel({ onClose, className }: UserProfilePanelProps) 
     const [notifHint, setNotifHint] = useState<string | null>(null);
     const [notifChecking, setNotifChecking] = useState(false);
     const [showPushSettings, setShowPushSettings] = useState(false);
+    const [showKeepAliveSettings, setShowKeepAliveSettings] = useState(false);
     const [showGlobalChatInfo, setShowGlobalChatInfo] = useState(false);
+    const [proactiveEnabled, setProactiveEnabled] = useState(true);
+    const [keepAliveSubtitle, setKeepAliveSubtitle] = useState("未开启");
     const profileAvatarInputRef = useRef<HTMLInputElement>(null);
     const [enterToSendEnabled, setEnterToSendEnabled] = useState(false);
     const [callVibrationEnabled, setCallVibrationEnabled] = useState(true);
@@ -192,6 +207,7 @@ export function UserProfilePanel({ onClose, className }: UserProfilePanelProps) 
         setEnterToSendEnabled(settings.enterToSendEnabled === true);
         setCallVibrationEnabled(settings.callVibrationEnabled !== false);
         setNotifyHideContentState(getNotifyHideContent());
+        setProactiveEnabled(isProactiveMessagingEnabled(settings));
         const wallet = loadWalletState();
         setWalletSummary({
             totalLabel: formatWalletAmount(getWalletBalance(wallet)),
@@ -225,6 +241,15 @@ export function UserProfilePanel({ onClose, className }: UserProfilePanelProps) 
                 setNotifHint(usesNativeSystemNotifications()
                     ? "已开启：后台落库后直接推系统横幅"
                     : readWebNotificationPermissionHint());
+            }
+            if (isBackgroundKeepAliveSupported()) {
+                const st = await getBackgroundKeepAliveStatus();
+                if (cancelled) return;
+                setKeepAliveSubtitle(st.enabled
+                    ? `运行中 · ${st.mode === "realtime" ? "实时" : "省电"} · ${st.heartbeatMinutes} 分钟心跳`
+                    : (settings.keepAliveEnabled ? "已开启（等待拉起）" : "未开启 — 推送易被系统掐断"));
+            } else {
+                setKeepAliveSubtitle("仅 Android 支持");
             }
         })();
         return () => { cancelled = true; };
@@ -308,6 +333,18 @@ export function UserProfilePanel({ onClose, className }: UserProfilePanelProps) 
         setNotifyHideContent(hide);
     };
 
+    const handleProactiveToggle = (enabled: boolean) => {
+        if (!enabled) {
+            const ok = window.confirm(
+                "关闭后角色不会再主动发消息（追问、定时唤醒、冷场重连等全部停）。\n你发消息后的正常回复不受影响。确定关闭？",
+            );
+            if (!ok) return;
+            clearPendingProactiveSchedules();
+        }
+        setProactiveEnabled(enabled);
+        saveChatAppSettings({ ...loadChatAppSettings(), proactiveMessagesEnabled: enabled });
+    };
+
     const handleEnterToSendToggle = (enabled: boolean) => {
         setEnterToSendEnabled(enabled);
         saveChatAppSettings({ ...loadChatAppSettings(), enterToSendEnabled: enabled });
@@ -323,6 +360,17 @@ export function UserProfilePanel({ onClose, className }: UserProfilePanelProps) 
     }
     if (showPushSettings) {
         return <OfflinePushSettingsPage onBack={() => { window.dispatchEvent(new CustomEvent("chat-hide-tabbar", { detail: false })); setShowPushSettings(false); }} />;
+    }
+    if (showKeepAliveSettings) {
+        return <KeepAliveSettingsPage onBack={() => {
+            window.dispatchEvent(new CustomEvent("chat-hide-tabbar", { detail: false }));
+            setShowKeepAliveSettings(false);
+            const st = peekBackgroundKeepAliveStatus();
+            const settings = loadChatAppSettings();
+            setKeepAliveSubtitle(st.enabled
+                ? `运行中 · ${st.mode === "realtime" ? "实时" : "省电"} · ${st.heartbeatMinutes} 分钟心跳`
+                : (settings.keepAliveEnabled ? "已开启（等待拉起）" : "未开启 — 推送易被系统掐断"));
+        }} />;
     }
     if (showGlobalChatInfo) {
         return <GlobalChatInfoSettings onBack={() => { window.dispatchEvent(new CustomEvent("chat-hide-tabbar", { detail: false })); setShowGlobalChatInfo(false); }} />;
@@ -495,57 +543,82 @@ export function UserProfilePanel({ onClose, className }: UserProfilePanelProps) 
                         </button>
                     </div>
 
-                    {/* 主动消息 + 后台通知 */}
+                    {/* 主动消息 + 后台保活 + 通知 */}
                     <div className="mx-4 mb-4 bg-[var(--c-card)] rounded-2xl px-4 py-1 flex flex-col"
                          style={{ boxShadow: "0 8px 24px rgba(0,0,0,0.025)" }}>
-                        <button className="flex items-center gap-3 py-3.5 w-full border-b border-[color-mix(in_srgb,var(--c-card-border)_20%,transparent)]" onClick={() => { window.dispatchEvent(new CustomEvent("chat-hide-tabbar", { detail: true })); setShowFollowUpEditor(true); }}>
-                            <Send size={18} className="text-[var(--c-icon)] opacity-70 shrink-0" strokeWidth={1.25}/>
+                        <div className="flex items-center gap-3 py-3.5 w-full border-b border-[color-mix(in_srgb,var(--c-card-border)_20%,transparent)]">
+                            <Radio size={18} className="text-[var(--c-icon)] opacity-70 shrink-0" strokeWidth={1.25}/>
                             <div className="flex flex-col flex-1 min-w-0 text-left gap-0.5">
-                                <span className="ts-14 font-semibold text-[var(--c-text-title)]">追发规则与延迟控制</span>
-                                <span className="ts-11 text-[var(--c-text)] opacity-70">设定角色的主动回复频率与时间间隔</span>
-                            </div>
-                            <ChevronRight size={16} className="text-[var(--c-icon)] opacity-50 shrink-0" />
-                        </button>
-                        <button className="flex items-center gap-3 py-3.5 w-full border-b border-[color-mix(in_srgb,var(--c-card-border)_20%,transparent)]" onClick={() => { window.dispatchEvent(new CustomEvent("chat-hide-tabbar", { detail: true })); setShowPushSettings(true); }}>
-                            <Satellite size={18} className="text-[var(--c-icon)] opacity-70 shrink-0" strokeWidth={1.25}/>
-                            <div className="flex flex-col flex-1 min-w-0 text-left gap-0.5">
-                                <span className="ts-14 font-semibold text-[var(--c-text-title)]">定时主动消息</span>
-                                <span className="ts-11 text-[var(--c-text)] opacity-70">安静时段、定时唤醒、冷场重连</span>
-                            </div>
-                            <ChevronRight size={16} className="text-[var(--c-icon)] opacity-50 shrink-0" />
-                        </button>
-                        <div className={`flex items-center gap-3 py-3.5 w-full${usesNativeSystemNotifications() ? " border-b border-[color-mix(in_srgb,var(--c-card-border)_20%,transparent)]" : ""}`}>
-                            <Bell size={18} className="text-[var(--c-icon)] opacity-70 shrink-0" strokeWidth={1.25}/>
-                            <div className="flex flex-col flex-1 min-w-0 text-left gap-0.5">
-                                <span className="ts-14 font-semibold text-[var(--c-text-title)]">
-                                    {usesNativeSystemNotifications() ? "新消息系统通知" : "浏览器后台通知"}
-                                </span>
+                                <span className="ts-14 font-semibold text-[var(--c-text-title)]">允许主动消息</span>
                                 <span className="ts-11 text-[var(--c-text)] opacity-70 leading-snug">
-                                    {notifHint || defaultNotificationHint()}
+                                    关闭后追问/定时/冷场等全部停；正常回复不受影响
                                 </span>
                             </div>
                             <div className="shrink-0">
-                                <Toggle checked={notifEnabled} disabled={notifChecking} onChange={handleNotificationToggle} />
+                                <Toggle checked={proactiveEnabled} onChange={handleProactiveToggle} />
                             </div>
                         </div>
-                        {usesNativeSystemNotifications() && (
-                            <div className="flex items-center gap-3 py-3.5 w-full">
-                                <EyeOff size={18} className="text-[var(--c-icon)] opacity-70 shrink-0" strokeWidth={1.25}/>
+
+                        <div style={{ opacity: proactiveEnabled ? 1 : 0.4, pointerEvents: proactiveEnabled ? "auto" : "none" }}>
+                            <button className="flex items-center gap-3 py-3.5 w-full border-b border-[color-mix(in_srgb,var(--c-card-border)_20%,transparent)]" onClick={() => { window.dispatchEvent(new CustomEvent("chat-hide-tabbar", { detail: true })); setShowFollowUpEditor(true); }}>
+                                <Send size={18} className="text-[var(--c-icon)] opacity-70 shrink-0" strokeWidth={1.25}/>
                                 <div className="flex flex-col flex-1 min-w-0 text-left gap-0.5">
-                                    <span className="ts-14 font-semibold text-[var(--c-text-title)]">通知不显示内容</span>
+                                    <span className="ts-14 font-semibold text-[var(--c-text-title)]">追发规则与延迟控制</span>
+                                    <span className="ts-11 text-[var(--c-text)] opacity-70">设定角色的主动回复频率与时间间隔</span>
+                                </div>
+                                <ChevronRight size={16} className="text-[var(--c-icon)] opacity-50 shrink-0" />
+                            </button>
+                            <button className="flex items-center gap-3 py-3.5 w-full border-b border-[color-mix(in_srgb,var(--c-card-border)_20%,transparent)]" onClick={() => { window.dispatchEvent(new CustomEvent("chat-hide-tabbar", { detail: true })); setShowPushSettings(true); }}>
+                                <Satellite size={18} className="text-[var(--c-icon)] opacity-70 shrink-0" strokeWidth={1.25}/>
+                                <div className="flex flex-col flex-1 min-w-0 text-left gap-0.5">
+                                    <span className="ts-14 font-semibold text-[var(--c-text-title)]">定时主动消息</span>
+                                    <span className="ts-11 text-[var(--c-text)] opacity-70">安静时段、定时唤醒、冷场重连</span>
+                                </div>
+                                <ChevronRight size={16} className="text-[var(--c-icon)] opacity-50 shrink-0" />
+                            </button>
+                            {isBackgroundKeepAliveSupported() && (
+                                <button className="flex items-center gap-3 py-3.5 w-full border-b border-[color-mix(in_srgb,var(--c-card-border)_20%,transparent)]" onClick={() => { window.dispatchEvent(new CustomEvent("chat-hide-tabbar", { detail: true })); setShowKeepAliveSettings(true); }}>
+                                    <HeartPulse size={18} className="text-[var(--c-icon)] opacity-70 shrink-0" strokeWidth={1.25}/>
+                                    <div className="flex flex-col flex-1 min-w-0 text-left gap-0.5">
+                                        <span className="ts-14 font-semibold text-[var(--c-text-title)]">后台保活</span>
+                                        <span className="ts-11 text-[var(--c-text)] opacity-70 leading-snug">{keepAliveSubtitle}</span>
+                                    </div>
+                                    <ChevronRight size={16} className="text-[var(--c-icon)] opacity-50 shrink-0" />
+                                </button>
+                            )}
+                            <div className={`flex items-center gap-3 py-3.5 w-full${usesNativeSystemNotifications() ? " border-b border-[color-mix(in_srgb,var(--c-card-border)_20%,transparent)]" : ""}`}>
+                                <Bell size={18} className="text-[var(--c-icon)] opacity-70 shrink-0" strokeWidth={1.25}/>
+                                <div className="flex flex-col flex-1 min-w-0 text-left gap-0.5">
+                                    <span className="ts-14 font-semibold text-[var(--c-text-title)]">
+                                        {usesNativeSystemNotifications() ? "新消息系统通知" : "浏览器后台通知"}
+                                    </span>
                                     <span className="ts-11 text-[var(--c-text)] opacity-70 leading-snug">
-                                        系统通知只显示「发来一条消息」，不泄露正文
+                                        {notifHint || defaultNotificationHint()}
                                     </span>
                                 </div>
                                 <div className="shrink-0">
-                                    <Toggle
-                                        checked={notifyHideContent}
-                                        disabled={!notifEnabled}
-                                        onChange={handleNotifyHideContentToggle}
-                                    />
+                                    <Toggle checked={notifEnabled} disabled={notifChecking} onChange={handleNotificationToggle} />
                                 </div>
                             </div>
-                        )}
+                            {usesNativeSystemNotifications() && (
+                                <div className="flex items-center gap-3 py-3.5 w-full">
+                                    <EyeOff size={18} className="text-[var(--c-icon)] opacity-70 shrink-0" strokeWidth={1.25}/>
+                                    <div className="flex flex-col flex-1 min-w-0 text-left gap-0.5">
+                                        <span className="ts-14 font-semibold text-[var(--c-text-title)]">通知不显示内容</span>
+                                        <span className="ts-11 text-[var(--c-text)] opacity-70 leading-snug">
+                                            系统通知只显示「发来一条消息」，不泄露正文
+                                        </span>
+                                    </div>
+                                    <div className="shrink-0">
+                                        <Toggle
+                                            checked={notifyHideContent}
+                                            disabled={!notifEnabled}
+                                            onChange={handleNotifyHideContentToggle}
+                                        />
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                     </div>
 
                     {/* 输入与聊天外观 */}

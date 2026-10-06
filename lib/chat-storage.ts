@@ -330,6 +330,8 @@ export function resolveMeetingInviteCardConfig(settings?: ChatAppSettings): Meet
     };
 }
 
+export type KeepAliveMode = "power_save" | "realtime";
+
 export type ChatAppSettings = {
     globalAppBackground?: string; // base64 or URL
     /** 私聊内“我的头像”默认值；单独会话头像优先 */
@@ -348,6 +350,17 @@ export type ChatAppSettings = {
     browserNotificationsEnabled?: boolean; // When true, send system/browser notification alerts when app/page is backgrounded
     /** Android/iOS 系统通知隐藏正文，只显示「发来一条消息」/「N 条新消息」 */
     notifyHideContent?: boolean;
+    /**
+     * 是否允许角色主动消息（追问/定时唤醒/经期关怀/冷场重连/群闲聊/互动传播）。
+     * 默认开；关闭不影响用户发消息后的正常回复链路。
+     */
+    proactiveMessagesEnabled?: boolean;
+    /** Android 常驻后台保活（默认关；开启后拉起 specialUse 前台服务 + 心跳） */
+    keepAliveEnabled?: boolean;
+    /** 保活模式：省电靠闹钟心跳；实时持 WakeLock（更费电） */
+    keepAliveMode?: KeepAliveMode;
+    /** 心跳间隔分钟数（1/5/15；Doze 下系统最快约 9 分钟） */
+    keepAliveHeartbeatMinutes?: 1 | 5 | 15;
     enterToSendEnabled?: boolean; // When true, Enter sends chat input and Shift+Enter inserts a newline
     callVibrationEnabled?: boolean; // 语音/视频来电等待接听时循环振动（默认开；iOS 网页不支持振动则无效果）
     maxToolRounds?: number; // 单条消息的工具循环轮数上限（默认 5；每轮=一次模型请求，轮内调用条数不限）
@@ -355,6 +368,12 @@ export type ChatAppSettings = {
     globalChatSounds?: ChatSoundsConfig;
     floatingDockEnabled?: boolean; // 悬浮球贴边半隐藏收拢模式（默认关）
 };
+
+/** 主动消息总开关：未设置时默认开启（兼容旧备份） */
+export function isProactiveMessagingEnabled(settings?: ChatAppSettings): boolean {
+    const s = settings ?? loadChatAppSettings();
+    return s.proactiveMessagesEnabled !== false;
+}
 
 // ── 聊天提示音配置 ────────────────────────────────────────────────
 

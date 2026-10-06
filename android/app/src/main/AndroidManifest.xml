@@ -34,6 +34,33 @@
             android:name=".GenerationKeepAliveService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+
+        <!-- 主动消息常驻保活：specialUse 规避 dataSync 6h/天上限；用户在设置里主动开启 -->
+        <service
+            android:name=".BackgroundKeepAliveService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Keep the local AI chat engine alive so scheduled proactive messages can generate and show system notifications while the app is backgrounded. Started only when the user enables background keep-alive in settings." />
+        </service>
+
+        <receiver
+            android:name=".HeartbeatReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="app.floatphone.app.ACTION_BG_KEEPALIVE_HEARTBEAT" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name=".BootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
     </application>
 
     <!-- Permissions -->
@@ -49,6 +76,11 @@
     <!-- 生成任务后台保活：前台服务 + WiFi 锁 -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- 主动消息常驻保活（specialUse） -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />

@@ -20,6 +20,8 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(MediaPermissionsPlugin.class);
         // 生成保活：长时间 LLM/生图请求期间拉起前台服务，退后台不被挂起
         registerPlugin(GenerationKeepAlivePlugin.class);
+        // 主动消息常驻保活：心跳 + specialUse 前台服务，保证后台仍能生成并推系统通知
+        registerPlugin(BackgroundKeepAlivePlugin.class);
         // 原生 HTTP：LLM 等长连接/流式请求由 OkHttp 承载，绕开 WebView fetch
         registerPlugin(NativeHttpPlugin.class);
         // 原生媒体存储：图片/音视频字节落文件系统，显示走 _capacitor_file_ 不占 JS 堆
