@@ -25,7 +25,15 @@ public final class HeartbeatScheduler {
         if (am == null) return;
         long triggerAt = System.currentTimeMillis() + minutes * 60_000L;
         try {
-            am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent(context));
+            // 精确闹钟在 Android 12+ 属于“后台启动前台服务”的豁免场景——自愈重启
+            // 服务靠它；inexact 闹钟的广播可能被拒绝启动前台服务。
+            // canScheduleExactAlarms 为假时（个别 ROM）降级为 inexact，只损失精度。
+            boolean canExact = Build.VERSION.SDK_INT < 31 || am.canScheduleExactAlarms();
+            if (canExact) {
+                am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent(context));
+            } else {
+                am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent(context));
+            }
         } catch (RuntimeException error) {
             // 某些 ROM 对 allowWhileIdle 有限制，降级为普通唤醒闹钟
             try {

@@ -43,8 +43,8 @@ public class BackgroundKeepAliveService extends Service {
     private static final int NOTIFICATION_ID = 4702;
     private static final int RECOVERY_NOTIFICATION_ID = 4703;
 
-    /** JS 引擎 ping 超时阈值：轮询 3s/次、30s 一个 ping，留足抖动余量 */
-    private static final long PING_TIMEOUT_MS = 5L * 60 * 1000;
+    /** JS 引擎 ping 超时下限：轮询 3s/次、30s 一个 ping，留足抖动余量 */
+    private static final long PING_TIMEOUT_MIN_MS = 5L * 60 * 1000;
     /** 存活巡检周期 */
     private static final long LIVENESS_CHECK_MS = 60_000;
     /** realtime 模式唤醒锁兜底上限（用户关开关时会正常 stop，这是防滞留保险） */
@@ -164,9 +164,19 @@ public class BackgroundKeepAliveService extends Service {
         }
     }
 
+    /**
+     * 失联阈值随心跳周期走：省电心跳最长 15 分钟，且 Doze 下被系统限流到
+     * 最快约 9 分钟一拍——固定 5 分钟会把“正常间隔”误判成引擎死亡，
+     * 导致每个心跳周期都误弹一次“点按恢复”。阈值 = 心跳周期 + 2 分钟缓冲。
+     */
+    private long pingTimeoutMs() {
+        int minutes = prefs(this).getInt(PREF_HEARTBEAT_MINUTES, 5);
+        return Math.max(PING_TIMEOUT_MIN_MS, minutes * 60_000L + 2L * 60_000);
+    }
+
     private void checkEngineLiveness() {
         long idleMs = System.currentTimeMillis() - lastPingAt;
-        if (idleMs < PING_TIMEOUT_MS || recoveryPosted) return;
+        if (idleMs < pingTimeoutMs() || recoveryPosted) return;
         recoveryPosted = true;
         postRecoveryNotification();
     }

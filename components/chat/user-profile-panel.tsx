@@ -355,15 +355,17 @@ export function UserProfilePanel({ onClose, className }: UserProfilePanelProps) 
 
     return (
         <>
-            <ConfirmDialog
-                title="关闭主动消息？"
-                message="关闭后角色不再主动发消息，已排期的定时消息和追问会一并取消；你发消息时 TA 仍会正常回复。"
-                variant="action"
-                confirmLabel="确认关闭"
-                cancelLabel="取消"
-                onConfirm={() => { setConfirmDisableProactive(false); applyProactiveEnabled(false); }}
-                onCancel={() => setConfirmDisableProactive(false)}
-            />
+            {confirmDisableProactive && (
+                <ConfirmDialog
+                    title="关闭主动消息？"
+                    message="关闭后角色不再主动发消息，已排期的定时消息和追问会一并取消；你发消息时 TA 仍会正常回复。"
+                    variant="action"
+                    confirmLabel="确认关闭"
+                    cancelLabel="取消"
+                    onConfirm={() => { setConfirmDisableProactive(false); applyProactiveEnabled(false); }}
+                    onCancel={() => setConfirmDisableProactive(false)}
+                />
+            )}
             <style>{`
                 .user-profile-page-root {
                     background: var(--c-page-body-bg) !important;

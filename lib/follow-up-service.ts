@@ -230,6 +230,13 @@ export function stopFollowUpService() {
 export function scheduleFollowUp(sessionId: string, count: number, stateValues?: StateValue[]) {
     const config = loadFollowUpConfig();
 
+    // 总开关已关闭：不再排新追问。在途生成结束时仍可能走到这里，
+    // 不拦的话重开开关后这条过期排商会立刻冒出来
+    if (!isProactiveMessagingEnabled()) {
+        clearFollowUpSchedule(sessionId);
+        return;
+    }
+
     if (!stateValues || stateValues.length === 0) {
         console.log(`[FollowUp] No state values, not scheduling.`);
         clearFollowUpSchedule(sessionId);
