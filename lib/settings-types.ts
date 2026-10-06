@@ -138,10 +138,14 @@ export type VoiceApiConfig = {
     sttModel?: string;
     defaultVoice: string;
     languageBoost?: string;
-    /** Minimax voice_setting.speed. Missing values keep the legacy 1.0x behavior. */
+    /** TTS speed multiplier. Minimax/OpenAI/ElevenLabs. Missing values keep the legacy 1.0x behavior. */
     speechSpeed?: number;
     /** Minimax voice_setting.pitch（半音，±12）。缺省保持旧行为（0，原声）。 */
     speechPitch?: number;
+    /** ElevenLabs voice_settings.stability (0–1). Missing keeps provider default (~0.5). */
+    stability?: number;
+    /** ElevenLabs voice_settings.similarity_boost (0–1). Missing keeps provider default (~0.75). */
+    similarityBoost?: number;
     customVoices?: { id: string; name: string; createdAt?: number }[];
     enableSTT: boolean;
     enableTTS: boolean;
@@ -306,6 +310,8 @@ export type BindingConfig = {
     qaApiConfigId?: string;
     /** Auxiliary API: used to translate reasoning/chain-of-thought text (global, not per-character) */
     reasoningTranslateApiConfigId?: string;
+    /** Auxiliary API: used for external tool-call rounds (MCP/REST/composite) in chat; unset = follow the main model (global, not per-character) */
+    toolCallApiConfigId?: string;
 };
 
 // --- Chat Toolbox ---

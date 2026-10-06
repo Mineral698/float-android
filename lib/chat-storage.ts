@@ -352,6 +352,16 @@ export type ChatAppSettings = {
     /** 全局聊天提示音配置（新消息/发送消息/来电/致电/挂断），在“全局聊天信息”里设置 */
     globalChatSounds?: ChatSoundsConfig;
     floatingDockEnabled?: boolean; // 悬浮球贴边半隐藏收拢模式（默认关）
+    /** 允许 AI 主动发消息（追问/定时唤醒/冷场重连/经期关怀/群闲聊/互动传播）。默认 true = 保持既有行为 */
+    proactiveMessagesEnabled?: boolean;
+    /** 后台保活：前台服务按住进程，切后台/锁屏期间引擎持续运行（默认关，耗电类能力需显式开启） */
+    keepAliveEnabled?: boolean;
+    /** 保活模式：省电=前台服务+闹钟心跳；实时=前台服务+常驻 WakeLock */
+    keepAliveMode?: "power_saving" | "realtime";
+    /** 省电模式心跳间隔（分钟）。Doze 深睡下系统限流最快约 9 分钟一拍 */
+    keepAliveHeartbeatMinutes?: number;
+    /** 后台通知不显示内容（只显示“发来一条消息”），默认关 */
+    notifyHideContent?: boolean;
 };
 
 // ── 聊天提示音配置 ────────────────────────────────────────────────
@@ -2110,6 +2120,11 @@ export function saveChatAppSettings(settings: ChatAppSettings) {
     if (typeof window === "undefined") return;
     kvSet(SETTINGS_KEY, JSON.stringify(settings));
     window.dispatchEvent(new CustomEvent(CHAT_APP_SETTINGS_UPDATED_EVENT, { detail: settings }));
+}
+
+/** 「允许主动消息」总开关：缺省视为开启（保持既有行为，兼容旧数据） */
+export function isProactiveMessagingEnabled(): boolean {
+    return loadChatAppSettings().proactiveMessagesEnabled !== false;
 }
 
 // --- Follow-up schedule persistence (supports multiple sessions) ---
