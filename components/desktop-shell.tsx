@@ -107,6 +107,11 @@ import { installChatSoundListener, playChatSoundOnce, setMiniChatSoundSessionId,
 import { setMascotContext } from "@/lib/mascot-context";
 import { DESKTOP_WIDGETS_CHANGED_EVENT } from "@/lib/mascot-events";
 import { sendBrowserNotification } from "@/lib/browser-notification";
+import {
+  NOTIFICATION_OPEN_SESSION_EVENT,
+  clearSessionNotification,
+  initNativeNotifications,
+} from "@/lib/native-notifications";
 import type { ChatSharePayload } from "@/lib/chat-share";
 import { completePendingMcpOAuthCallback } from "@/lib/tool-executor";
 import { LayoutGrid, LoaderCircle, RefreshCw } from "lucide-react";
@@ -1809,6 +1814,7 @@ export function DesktopShell({ initialThemeProfile, initialThemeAssets }: Deskto
       startFollowUpService();
       startMomentsService();
       startDiaryEntryTimerService();
+      void initNativeNotifications();
     })();
 
     return () => {
@@ -2450,6 +2456,7 @@ html,body{margin:0;padding:0;width:100%;height:100%;background:#121110;color:rgb
       chatMessageNoticeTimerRef.current = null;
     }
     setChatMessageNotice(null);
+    void clearSessionNotification(sessionId);
     setShowMiniChat(false);
     setActiveApp("chat" as IconId);
     setChatInitSessionId(sessionId);
@@ -2457,6 +2464,17 @@ html,body{margin:0;padding:0;width:100%;height:100%;background:#121110;color:rgb
       window.dispatchEvent(new CustomEvent(CHAT_OPEN_SESSION_EVENT, { detail: { sessionId } }));
     }, 0);
   }, []);
+
+  // 系统通知点击 → 直达会话（与 App 内横幅共用 openChatSessionFromNotice）
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const sessionId = (e as CustomEvent<{ sessionId?: string }>).detail?.sessionId;
+      if (!sessionId) return;
+      openChatSessionFromNotice(sessionId);
+    };
+    window.addEventListener(NOTIFICATION_OPEN_SESSION_EVENT, handler);
+    return () => window.removeEventListener(NOTIFICATION_OPEN_SESSION_EVENT, handler);
+  }, [openChatSessionFromNotice]);
 
   useEffect(() => {
     const handler = (e: Event) => {

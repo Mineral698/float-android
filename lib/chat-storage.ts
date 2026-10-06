@@ -345,7 +345,9 @@ export type ChatAppSettings = {
     timeAware?: boolean; // When true, inject timestamps into prompt so AI knows message timing (default: true)
     promptViewerEnabled?: boolean; // When true, show the floating prompt viewer entry
     quickActionEnabled?: boolean; // When true, show the floating quick action entry
-    browserNotificationsEnabled?: boolean; // When true, send browser Notification API alerts when page is hidden
+    browserNotificationsEnabled?: boolean; // When true, send system/browser notification alerts when app/page is backgrounded
+    /** Android/iOS 系统通知隐藏正文，只显示「发来一条消息」/「N 条新消息」 */
+    notifyHideContent?: boolean;
     enterToSendEnabled?: boolean; // When true, Enter sends chat input and Shift+Enter inserts a newline
     callVibrationEnabled?: boolean; // 语音/视频来电等待接听时循环振动（默认开；iOS 网页不支持振动则无效果）
     maxToolRounds?: number; // 单条消息的工具循环轮数上限（默认 5；每轮=一次模型请求，轮内调用条数不限）

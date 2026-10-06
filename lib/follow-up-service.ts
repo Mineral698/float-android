@@ -206,6 +206,8 @@ export function startFollowUpService() {
             pollMenstrualPeriodCare(Date.now());
         };
         window.addEventListener("menstrual-period-care-updated", periodCareUpdateHandler);
+        // 原生系统通知：建 channel + 监听点击跳转会话（网页端为 no-op）
+        void import("./native-notifications").then(m => m.initNativeNotifications()).catch(() => undefined);
     }
 }
 
@@ -1285,7 +1287,7 @@ export async function parseAndSaveResponse(
         const bodyPrefix = isGroup && options?.senderName ? `${options.senderName}: ` : "";
         const partBody = (part: ParsedMessagePart) => bodyPrefix + ((part.content || "").trim()
             || (part.mediaType === "image" && part.mediaData?.label ? `发了一张照片: ${part.mediaData.label}` : "发来一条消息"));
-        const { sendBrowserNotification } = await import("./browser-notification");
+        const { notifyBackgroundMessage } = await import("./native-notifications");
         filteredParts.forEach((part, index) => {
             bgSetTimeout(() => {
                 dispatchChatMessageNotice({
@@ -1295,7 +1297,12 @@ export async function parseAndSaveResponse(
                     avatar,
                     ...(isGroup ? { isGroup: true } : {}),
                 });
-                sendBrowserNotification(charName, { body: partBody(part).slice(0, 60), icon: avatar || undefined });
+                void notifyBackgroundMessage({
+                    sessionId,
+                    title: charName,
+                    body: partBody(part).slice(0, 60),
+                    icon: avatar || undefined,
+                });
             }, index * BACKGROUND_MESSAGE_STAGGER_MS);
         });
     }

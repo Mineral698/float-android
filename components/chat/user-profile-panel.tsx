@@ -30,7 +30,13 @@ import { loadChatContacts } from "@/lib/chat-storage";
 import { loadCharacters } from "@/lib/character-storage";
 import { triggerImmediatePost } from "@/lib/moments-engine";
 import type { Character } from "@/lib/character-types";
-import { requestNotificationPermission } from "@/lib/browser-notification";
+import {
+    checkSystemNotificationPermission,
+    getNotifyHideContent,
+    requestSystemNotificationPermission,
+    setNotifyHideContent,
+    usesNativeSystemNotifications,
+} from "@/lib/native-notifications";
 import { loadTimedWakeSchedules, makeTimedWakeId, removeTimedWakeSchedule, saveTimedWakeSchedule, type TimedWakeSchedule } from "@/lib/timed-wake-storage";
 import { IDLE_RECONNECT_MAX_CONSECUTIVE, isRandomIdleInterval, loadIdleReconnectRules, removeIdleReconnectRule, upsertIdleReconnectRule, type IdleReconnectRule } from "@/lib/idle-reconnect-storage";
 import { addChatContact, createOrGetSession } from "@/lib/chat-storage";
@@ -44,6 +50,7 @@ import {
     CloudUpload,
     ChevronRight,
     Clock,
+    EyeOff,
     FileCode2,
     Heart,
     MessageSquare,
@@ -130,21 +137,22 @@ function ProfileSettingsSliderItem({
     );
 }
 
-function readBrowserNotificationPermissionHint(): string {
-    if (typeof window === "undefined") return "当前浏览器权限：未知（服务端渲染）";
+function readWebNotificationPermissionHint(): string {
+    if (typeof window === "undefined") return "当前浏览器权限：未知";
     if (!("Notification" in window)) return "当前浏览器权限：不支持 Notification API";
     const permission = Notification.permission;
     const secureHint = window.isSecureContext ? "" : "；当前不是 HTTPS/安全上下文";
     const originHint = `当前站点：${window.location.origin}`;
-    if (permission === "granted") return `${originHint}；浏览器权限：已允许（granted）${secureHint}`;
-    if (permission === "denied") return `${originHint}；浏览器权限：已拒绝（denied）${secureHint}`;
-    return `${originHint}；浏览器权限：未授权（default）${secureHint}`;
+    if (permission === "granted") return `${originHint}；浏览器权限：已允许${secureHint}`;
+    if (permission === "denied") return `${originHint}；浏览器权限：已拒绝（请在系统设置里重新开启）${secureHint}`;
+    return `${originHint}；浏览器权限：未授权${secureHint}`;
 }
 
-function isBrowserNotificationGranted(): boolean {
-    return typeof window !== "undefined"
-        && "Notification" in window
-        && Notification.permission === "granted";
+function defaultNotificationHint(): string {
+    if (usesNativeSystemNotifications()) {
+        return "App 退到后台时弹出系统通知（类似微信横幅）；前台仍用应用内提醒";
+    }
+    return "允许网页在后台时弹出新消息系统通知";
 }
 
 /* ══════════════════════════════════════════
@@ -176,16 +184,14 @@ export function UserProfilePanel({ onClose, className }: UserProfilePanelProps) 
         };
     });
 
+    const [notifyHideContent, setNotifyHideContentState] = useState(false);
+
     useEffect(() => {
         setIdentity(resolveUserIdentity());
         const settings = loadChatAppSettings();
-        const browserGranted = isBrowserNotificationGranted();
-        setNotifEnabled(settings.browserNotificationsEnabled === true && browserGranted);
         setEnterToSendEnabled(settings.enterToSendEnabled === true);
         setCallVibrationEnabled(settings.callVibrationEnabled !== false);
-        if (settings.browserNotificationsEnabled === true && !browserGranted) {
-            setNotifHint(readBrowserNotificationPermissionHint());
-        }
+        setNotifyHideContentState(getNotifyHideContent());
         const wallet = loadWalletState();
         setWalletSummary({
             totalLabel: formatWalletAmount(getWalletBalance(wallet)),
@@ -202,6 +208,26 @@ export function UserProfilePanel({ onClose, className }: UserProfilePanelProps) 
                 visitors: 1234 + contactsCount * 17 + userPostsCount * 43 // simple deterministic mock equation
             });
         } catch (e) { }
+
+        let cancelled = false;
+        void (async () => {
+            const granted = await checkSystemNotificationPermission();
+            if (cancelled) return;
+            const enabled = settings.browserNotificationsEnabled === true && granted;
+            setNotifEnabled(enabled);
+            if (settings.browserNotificationsEnabled === true && !granted) {
+                setNotifHint(usesNativeSystemNotifications()
+                    ? "已开启设置，但系统通知权限未授予——请点开关重新申请，或到系统设置里允许通知"
+                    : readWebNotificationPermissionHint());
+            } else if (!settings.browserNotificationsEnabled) {
+                setNotifHint(defaultNotificationHint());
+            } else {
+                setNotifHint(usesNativeSystemNotifications()
+                    ? "已开启：后台新消息会弹出系统通知"
+                    : readWebNotificationPermissionHint());
+            }
+        })();
+        return () => { cancelled = true; };
     }, []);
 
     useEffect(() => {
@@ -247,27 +273,39 @@ export function UserProfilePanel({ onClose, className }: UserProfilePanelProps) 
         if (!enabled) {
             setNotifEnabled(false);
             saveChatAppSettings({ ...loadChatAppSettings(), browserNotificationsEnabled: false });
-            setNotifHint(`已关闭。${readBrowserNotificationPermissionHint()}`);
+            setNotifHint(usesNativeSystemNotifications()
+                ? "已关闭系统通知。前台应用内横幅不受影响"
+                : `已关闭。${readWebNotificationPermissionHint()}`);
             return;
         }
 
         setNotifChecking(true);
-        setNotifHint("正在检查浏览器通知权限...");
+        setNotifHint(usesNativeSystemNotifications()
+            ? "正在申请系统通知权限…"
+            : "正在检查浏览器通知权限…");
         try {
-            const granted = await requestNotificationPermission();
-            const permissionHint = readBrowserNotificationPermissionHint();
-            if (granted && isBrowserNotificationGranted()) {
+            const granted = await requestSystemNotificationPermission();
+            if (granted) {
                 setNotifEnabled(true);
                 saveChatAppSettings({ ...loadChatAppSettings(), browserNotificationsEnabled: true });
-                setNotifHint(permissionHint);
+                setNotifHint(usesNativeSystemNotifications()
+                    ? "已开启：App 在后台时会弹出系统通知横幅"
+                    : readWebNotificationPermissionHint());
             } else {
                 setNotifEnabled(false);
                 saveChatAppSettings({ ...loadChatAppSettings(), browserNotificationsEnabled: false });
-                setNotifHint(permissionHint);
+                setNotifHint(usesNativeSystemNotifications()
+                    ? "未获得通知权限。请到系统设置 → 应用 → float → 通知 中允许"
+                    : readWebNotificationPermissionHint());
             }
         } finally {
             setNotifChecking(false);
         }
+    };
+
+    const handleNotifyHideContentToggle = (hide: boolean) => {
+        setNotifyHideContentState(hide);
+        setNotifyHideContent(hide);
     };
 
     const handleEnterToSendToggle = (enabled: boolean) => {
@@ -507,14 +545,33 @@ export function UserProfilePanel({ onClose, className }: UserProfilePanelProps) 
                             <Toggle checked={callVibrationEnabled} onChange={handleCallVibrationToggle} />
                         </div>
 
-                        <div className="flex items-center gap-3 py-3 w-full">
+                        <div className={`flex items-center gap-3 py-3 w-full${usesNativeSystemNotifications() ? " border-b border-[color-mix(in_srgb,var(--c-card-border)_20%,transparent)]" : ""}`}>
                             <Bell size={18} className="text-[var(--c-icon)] opacity-70" strokeWidth={1.25}/>
                             <div className="flex flex-col flex-1 text-left gap-0.5">
-                                <span className="ts-14 font-semibold text-[var(--c-text-title)]">浏览器后台通知</span>
-                                <span className="ts-11 text-[var(--c-text)] opacity-70">{notifHint || "允许网页在后台时弹出新消息横幅提醒"}</span>
+                                <span className="ts-14 font-semibold text-[var(--c-text-title)]">
+                                    {usesNativeSystemNotifications() ? "新消息系统通知" : "浏览器后台通知"}
+                                </span>
+                                <span className="ts-11 text-[var(--c-text)] opacity-70">{notifHint || defaultNotificationHint()}</span>
                             </div>
                             <Toggle checked={notifEnabled} disabled={notifChecking} onChange={handleNotificationToggle} />
                         </div>
+
+                        {usesNativeSystemNotifications() && (
+                            <div className="flex items-center gap-3 py-3 w-full">
+                                <EyeOff size={18} className="text-[var(--c-icon)] opacity-70" strokeWidth={1.25}/>
+                                <div className="flex flex-col flex-1 text-left gap-0.5">
+                                    <span className="ts-14 font-semibold text-[var(--c-text-title)]">通知不显示内容</span>
+                                    <span className="ts-11 text-[var(--c-text)] opacity-70">
+                                        开启后系统通知只显示「发来一条消息」，不泄露正文
+                                    </span>
+                                </div>
+                                <Toggle
+                                    checked={notifyHideContent}
+                                    disabled={!notifEnabled}
+                                    onChange={handleNotifyHideContentToggle}
+                                />
+                            </div>
+                        )}
                     </div>
 
                     {/* 高级工具 */}
