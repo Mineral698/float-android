@@ -150,9 +150,9 @@ function readWebNotificationPermissionHint(): string {
 
 function defaultNotificationHint(): string {
     if (usesNativeSystemNotifications()) {
-        return "App 退到后台时弹出系统通知（类似微信横幅）；前台仍用应用内提醒";
+        return "后台生成新消息后直接弹出系统横幅，无需先打开 App；前台仍用应用内提醒";
     }
-    return "允许网页在后台时弹出新消息系统通知";
+    return "网页在后台时用浏览器通知提醒新消息";
 }
 
 /* ══════════════════════════════════════════
@@ -217,13 +217,13 @@ export function UserProfilePanel({ onClose, className }: UserProfilePanelProps) 
             setNotifEnabled(enabled);
             if (settings.browserNotificationsEnabled === true && !granted) {
                 setNotifHint(usesNativeSystemNotifications()
-                    ? "已开启设置，但系统通知权限未授予——请点开关重新申请，或到系统设置里允许通知"
+                    ? "权限未授予，请重新打开开关或到系统设置允许通知"
                     : readWebNotificationPermissionHint());
             } else if (!settings.browserNotificationsEnabled) {
                 setNotifHint(defaultNotificationHint());
             } else {
                 setNotifHint(usesNativeSystemNotifications()
-                    ? "已开启：后台新消息会弹出系统通知"
+                    ? "已开启：后台落库后直接推系统横幅"
                     : readWebNotificationPermissionHint());
             }
         })();
@@ -274,7 +274,7 @@ export function UserProfilePanel({ onClose, className }: UserProfilePanelProps) 
             setNotifEnabled(false);
             saveChatAppSettings({ ...loadChatAppSettings(), browserNotificationsEnabled: false });
             setNotifHint(usesNativeSystemNotifications()
-                ? "已关闭系统通知。前台应用内横幅不受影响"
+                ? "已关闭。前台应用内横幅不受影响"
                 : `已关闭。${readWebNotificationPermissionHint()}`);
             return;
         }
@@ -289,13 +289,13 @@ export function UserProfilePanel({ onClose, className }: UserProfilePanelProps) 
                 setNotifEnabled(true);
                 saveChatAppSettings({ ...loadChatAppSettings(), browserNotificationsEnabled: true });
                 setNotifHint(usesNativeSystemNotifications()
-                    ? "已开启：App 在后台时会弹出系统通知横幅"
+                    ? "已开启：后台落库后直接推系统横幅"
                     : readWebNotificationPermissionHint());
             } else {
                 setNotifEnabled(false);
                 saveChatAppSettings({ ...loadChatAppSettings(), browserNotificationsEnabled: false });
                 setNotifHint(usesNativeSystemNotifications()
-                    ? "未获得通知权限。请到系统设置 → 应用 → float → 通知 中允许"
+                    ? "未获权限，请到系统设置 → 应用 → float → 通知 中允许"
                     : readWebNotificationPermissionHint());
             }
         } finally {
@@ -495,83 +495,92 @@ export function UserProfilePanel({ onClose, className }: UserProfilePanelProps) 
                         </button>
                     </div>
 
-                    {/* 主动消息 */}
+                    {/* 主动消息 + 后台通知 */}
                     <div className="mx-4 mb-4 bg-[var(--c-card)] rounded-2xl px-4 py-1 flex flex-col"
                          style={{ boxShadow: "0 8px 24px rgba(0,0,0,0.025)" }}>
-                        <button className="flex items-center gap-3 py-3.5 w-full" onClick={() => { window.dispatchEvent(new CustomEvent("chat-hide-tabbar", { detail: true })); setShowFollowUpEditor(true); }}>
-                            <Send size={18} className="text-[var(--c-icon)] opacity-70" strokeWidth={1.25}/>
-                            <div className="flex flex-col flex-1 text-left gap-0.5">
+                        <button className="flex items-center gap-3 py-3.5 w-full border-b border-[color-mix(in_srgb,var(--c-card-border)_20%,transparent)]" onClick={() => { window.dispatchEvent(new CustomEvent("chat-hide-tabbar", { detail: true })); setShowFollowUpEditor(true); }}>
+                            <Send size={18} className="text-[var(--c-icon)] opacity-70 shrink-0" strokeWidth={1.25}/>
+                            <div className="flex flex-col flex-1 min-w-0 text-left gap-0.5">
                                 <span className="ts-14 font-semibold text-[var(--c-text-title)]">追发规则与延迟控制</span>
                                 <span className="ts-11 text-[var(--c-text)] opacity-70">设定角色的主动回复频率与时间间隔</span>
                             </div>
-                            <ChevronRight size={16} className="text-[var(--c-icon)] opacity-50" />
+                            <ChevronRight size={16} className="text-[var(--c-icon)] opacity-50 shrink-0" />
                         </button>
-                        <button className="flex items-center gap-3 py-3.5 w-full" onClick={() => { window.dispatchEvent(new CustomEvent("chat-hide-tabbar", { detail: true })); setShowPushSettings(true); }}>
-                            <Satellite size={18} className="text-[var(--c-icon)] opacity-70" strokeWidth={1.25}/>
-                            <div className="flex flex-col flex-1 text-left gap-0.5">
+                        <button className="flex items-center gap-3 py-3.5 w-full border-b border-[color-mix(in_srgb,var(--c-card-border)_20%,transparent)]" onClick={() => { window.dispatchEvent(new CustomEvent("chat-hide-tabbar", { detail: true })); setShowPushSettings(true); }}>
+                            <Satellite size={18} className="text-[var(--c-icon)] opacity-70 shrink-0" strokeWidth={1.25}/>
+                            <div className="flex flex-col flex-1 min-w-0 text-left gap-0.5">
                                 <span className="ts-14 font-semibold text-[var(--c-text-title)]">定时主动消息</span>
-                                <span className="ts-11 text-[var(--c-text)] opacity-70">安静时段、定时主动消息</span>
+                                <span className="ts-11 text-[var(--c-text)] opacity-70">安静时段、定时唤醒、冷场重连</span>
                             </div>
-                            <ChevronRight size={16} className="text-[var(--c-icon)] opacity-50" />
+                            <ChevronRight size={16} className="text-[var(--c-icon)] opacity-50 shrink-0" />
                         </button>
-                        <button className="flex items-center gap-3 py-3.5 w-full border-t border-[color-mix(in_srgb,var(--c-card-border)_20%,transparent)]" onClick={() => { window.dispatchEvent(new CustomEvent("chat-hide-tabbar", { detail: true })); setShowGlobalChatInfo(true); }}>
-                            <SlidersHorizontal size={18} className="text-[var(--c-icon)] opacity-70" strokeWidth={1.25}/>
-                            <div className="flex flex-col flex-1 text-left gap-0.5">
-                                <span className="ts-14 font-semibold text-[var(--c-text-title)]">全局聊天信息</span>
-                                <span className="ts-11 text-[var(--c-text)] opacity-70">私聊默认头像、状态栏、背景、CSS 与最近图片</span>
-                            </div>
-                            <ChevronRight size={16} className="text-[var(--c-icon)] opacity-50" />
-                        </button>
-                    </div>
-
-                    {/* 输入与提醒 */}
-                    <div className="mx-4 mb-4 bg-[var(--c-card)] rounded-2xl px-4 py-1 flex flex-col"
-                         style={{ boxShadow: "0 8px 24px rgba(0,0,0,0.025)" }}>
-                        <div className="flex items-center gap-3 py-3 w-full border-b border-[color-mix(in_srgb,var(--c-card-border)_20%,transparent)]">
-                            <Keyboard size={18} className="text-[var(--c-icon)] opacity-70" strokeWidth={1.25}/>
-                            <div className="flex flex-col flex-1 text-left gap-0.5">
-                                <span className="ts-14 font-semibold text-[var(--c-text-title)]">回车发送</span>
-                                <span className="ts-11 text-[var(--c-text)] opacity-70">开启后 Enter 发送，Shift+Enter 换行</span>
-                            </div>
-                            <Toggle checked={enterToSendEnabled} onChange={handleEnterToSendToggle} />
-                        </div>
-
-                        <div className="flex items-center gap-3 py-3 w-full border-b border-[color-mix(in_srgb,var(--c-card-border)_20%,transparent)]">
-                            <Vibrate size={18} className="text-[var(--c-icon)] opacity-70" strokeWidth={1.25}/>
-                            <div className="flex flex-col flex-1 text-left gap-0.5">
-                                <span className="ts-14 font-semibold text-[var(--c-text-title)]">语音/视频来电振动</span>
-                                <span className="ts-11 text-[var(--c-text)] opacity-70">角色来电等待接听时手机振动（iOS 网页不支持振动）</span>
-                            </div>
-                            <Toggle checked={callVibrationEnabled} onChange={handleCallVibrationToggle} />
-                        </div>
-
-                        <div className={`flex items-center gap-3 py-3 w-full${usesNativeSystemNotifications() ? " border-b border-[color-mix(in_srgb,var(--c-card-border)_20%,transparent)]" : ""}`}>
-                            <Bell size={18} className="text-[var(--c-icon)] opacity-70" strokeWidth={1.25}/>
-                            <div className="flex flex-col flex-1 text-left gap-0.5">
+                        <div className={`flex items-center gap-3 py-3.5 w-full${usesNativeSystemNotifications() ? " border-b border-[color-mix(in_srgb,var(--c-card-border)_20%,transparent)]" : ""}`}>
+                            <Bell size={18} className="text-[var(--c-icon)] opacity-70 shrink-0" strokeWidth={1.25}/>
+                            <div className="flex flex-col flex-1 min-w-0 text-left gap-0.5">
                                 <span className="ts-14 font-semibold text-[var(--c-text-title)]">
                                     {usesNativeSystemNotifications() ? "新消息系统通知" : "浏览器后台通知"}
                                 </span>
-                                <span className="ts-11 text-[var(--c-text)] opacity-70">{notifHint || defaultNotificationHint()}</span>
+                                <span className="ts-11 text-[var(--c-text)] opacity-70 leading-snug">
+                                    {notifHint || defaultNotificationHint()}
+                                </span>
                             </div>
-                            <Toggle checked={notifEnabled} disabled={notifChecking} onChange={handleNotificationToggle} />
+                            <div className="shrink-0">
+                                <Toggle checked={notifEnabled} disabled={notifChecking} onChange={handleNotificationToggle} />
+                            </div>
                         </div>
-
                         {usesNativeSystemNotifications() && (
-                            <div className="flex items-center gap-3 py-3 w-full">
-                                <EyeOff size={18} className="text-[var(--c-icon)] opacity-70" strokeWidth={1.25}/>
-                                <div className="flex flex-col flex-1 text-left gap-0.5">
+                            <div className="flex items-center gap-3 py-3.5 w-full">
+                                <EyeOff size={18} className="text-[var(--c-icon)] opacity-70 shrink-0" strokeWidth={1.25}/>
+                                <div className="flex flex-col flex-1 min-w-0 text-left gap-0.5">
                                     <span className="ts-14 font-semibold text-[var(--c-text-title)]">通知不显示内容</span>
-                                    <span className="ts-11 text-[var(--c-text)] opacity-70">
-                                        开启后系统通知只显示「发来一条消息」，不泄露正文
+                                    <span className="ts-11 text-[var(--c-text)] opacity-70 leading-snug">
+                                        系统通知只显示「发来一条消息」，不泄露正文
                                     </span>
                                 </div>
-                                <Toggle
-                                    checked={notifyHideContent}
-                                    disabled={!notifEnabled}
-                                    onChange={handleNotifyHideContentToggle}
-                                />
+                                <div className="shrink-0">
+                                    <Toggle
+                                        checked={notifyHideContent}
+                                        disabled={!notifEnabled}
+                                        onChange={handleNotifyHideContentToggle}
+                                    />
+                                </div>
                             </div>
                         )}
+                    </div>
+
+                    {/* 输入与聊天外观 */}
+                    <div className="mx-4 mb-4 bg-[var(--c-card)] rounded-2xl px-4 py-1 flex flex-col"
+                         style={{ boxShadow: "0 8px 24px rgba(0,0,0,0.025)" }}>
+                        <div className="flex items-center gap-3 py-3.5 w-full border-b border-[color-mix(in_srgb,var(--c-card-border)_20%,transparent)]">
+                            <Keyboard size={18} className="text-[var(--c-icon)] opacity-70 shrink-0" strokeWidth={1.25}/>
+                            <div className="flex flex-col flex-1 min-w-0 text-left gap-0.5">
+                                <span className="ts-14 font-semibold text-[var(--c-text-title)]">回车发送</span>
+                                <span className="ts-11 text-[var(--c-text)] opacity-70">开启后 Enter 发送，Shift+Enter 换行</span>
+                            </div>
+                            <div className="shrink-0">
+                                <Toggle checked={enterToSendEnabled} onChange={handleEnterToSendToggle} />
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-3 py-3.5 w-full border-b border-[color-mix(in_srgb,var(--c-card-border)_20%,transparent)]">
+                            <Vibrate size={18} className="text-[var(--c-icon)] opacity-70 shrink-0" strokeWidth={1.25}/>
+                            <div className="flex flex-col flex-1 min-w-0 text-left gap-0.5">
+                                <span className="ts-14 font-semibold text-[var(--c-text-title)]">语音/视频来电振动</span>
+                                <span className="ts-11 text-[var(--c-text)] opacity-70">角色来电等待接听时手机振动（iOS 网页不支持振动）</span>
+                            </div>
+                            <div className="shrink-0">
+                                <Toggle checked={callVibrationEnabled} onChange={handleCallVibrationToggle} />
+                            </div>
+                        </div>
+
+                        <button className="flex items-center gap-3 py-3.5 w-full" onClick={() => { window.dispatchEvent(new CustomEvent("chat-hide-tabbar", { detail: true })); setShowGlobalChatInfo(true); }}>
+                            <SlidersHorizontal size={18} className="text-[var(--c-icon)] opacity-70 shrink-0" strokeWidth={1.25}/>
+                            <div className="flex flex-col flex-1 min-w-0 text-left gap-0.5">
+                                <span className="ts-14 font-semibold text-[var(--c-text-title)]">全局聊天信息</span>
+                                <span className="ts-11 text-[var(--c-text)] opacity-70">私聊默认头像、背景、CSS 与最近图片</span>
+                            </div>
+                            <ChevronRight size={16} className="text-[var(--c-icon)] opacity-50 shrink-0" />
+                        </button>
                     </div>
 
                     {/* 高级工具 */}
@@ -1453,8 +1462,8 @@ function OfflinePushSettingsPage({ onBack }: { onBack: () => void }) {
                 </div>
                 <p className="menu-group-desc mx-2">
                     {tmHint || (tmMode === "idle"
-                        ? `你长时间不发消息时 TA 会主动来找你；不回复最多连发 ${IDLE_RECONNECT_MAX_CONSECUTIVE} 次，回复后重新开始计。每个角色一条规则。`
-                        : "每个角色同时仅保留一条，新建会替换旧的。关掉后台由服务端接管生成并推送（需开启离线推送）。")}
+                        ? `你长时间不发消息时 TA 会主动来找你；不回复最多连发 ${IDLE_RECONNECT_MAX_CONSECUTIVE} 次，回复后重新开始计。每个角色一条规则。需 App 进程仍在（未强杀）；开启「新消息系统通知」后后台落库会直接弹系统横幅。`
+                        : "每个角色同时仅保留一条，新建会替换旧的。到点后在本地后台生成；开启「新消息系统通知」后会直接推系统横幅，无需先打开 App。")}
                 </p>
 
                 {(timedSchedules.length > 0 || idleRules.length > 0) && (
