@@ -11,7 +11,7 @@
 // - 可选「通知不显示内容」隐私开关（notifyHideContent）
 
 import { App } from "@capacitor/app";
-import { Capacitor } from "@capacitor/core";
+import { Capacitor, registerPlugin } from "@capacitor/core";
 import {
     LocalNotifications,
     type Channel,
@@ -20,6 +20,16 @@ import {
 
 import { sendBrowserNotification } from "./browser-notification";
 import { loadChatAppSettings, saveChatAppSettings } from "./chat-storage";
+
+type AndroidChatNotifyPlugin = {
+    showChatNotification(options: { id: number; title: string; body: string; sessionId: string }): Promise<void>;
+    cancelChatNotification(options: { id: number }): Promise<void>;
+};
+
+/** Android 走自有高优先级通知；iOS 仍用 LocalNotifications */
+const androidChatNotify: AndroidChatNotifyPlugin | null = Capacitor.getPlatform() === "android"
+    ? registerPlugin<AndroidChatNotifyPlugin>("BackgroundKeepAlive")
+    : null;
 
 export const NOTIFICATION_OPEN_SESSION_EVENT = "ai-notification-open-session";
 
@@ -45,7 +55,10 @@ function isNativeNotificationPlatform(): boolean {
 }
 
 function isSystemNotificationSettingEnabled(): boolean {
-    return loadChatAppSettings().browserNotificationsEnabled === true;
+    const enabled = loadChatAppSettings().browserNotificationsEnabled;
+    // Android/iOS 默认开（未显式关闭就弹）。网页仍需用户打开开关。
+    if (isNativeNotificationPlatform()) return enabled !== false;
+    return enabled === true;
 }
 
 function shouldHideContent(): boolean {
@@ -87,6 +100,13 @@ async function ensureChannel(): Promise<void> {
 }
 
 async function clearDeliveredById(id: number): Promise<void> {
+    if (androidChatNotify) {
+        try {
+            await androidChatNotify.cancelChatNotification({ id });
+        } catch {
+            // ignore
+        }
+    }
     try {
         await LocalNotifications.removeDeliveredNotifications({
             // Cap 7 typings require title/body on DeliveredNotificationSchema; runtime only needs id
@@ -146,10 +166,22 @@ export function initNativeNotifications(): Promise<void> {
 
         await ensureChannel();
 
+        if (isSystemNotificationSettingEnabled()) {
+            try {
+                const perm = await LocalNotifications.checkPermissions();
+                if (perm.display !== "granted") {
+                    await LocalNotifications.requestPermissions();
+                }
+            } catch (err) {
+                console.warn("[NativeNotifications] permission request failed:", err);
+            }
+        }
+
         try {
             await App.addListener("appStateChange", ({ isActive }) => {
                 appIsActive = isActive;
-                if (isActive) {
+                const pageVisible = typeof document === "undefined" || !document.hidden;
+                if (isActive && pageVisible) {
                     void clearAllSessionNotifications();
                 }
             });
@@ -176,6 +208,40 @@ export function initNativeNotifications(): Promise<void> {
     });
 
     return initPromise ?? Promise.resolve();
+}
+
+/** 前台才抑制系统通知。任一信号表明已退后台就弹。 */
+async function isAppForeground(): Promise<boolean> {
+    try {
+        const state = await App.getState();
+        if (state.isActive === false) return false;
+    } catch {
+        // 读不到原生状态时看 visibility
+    }
+    if (typeof document !== "undefined" && document.hidden) return false;
+    return appIsActive;
+}
+
+async function postNativeNotification(payload: {
+    id: number;
+    title: string;
+    body: string;
+    sessionId: string;
+}): Promise<void> {
+    if (androidChatNotify) {
+        await androidChatNotify.showChatNotification(payload);
+        return;
+    }
+    const schema: LocalNotificationSchema = {
+        id: payload.id,
+        title: payload.title,
+        body: payload.body,
+        largeBody: payload.body,
+        channelId: CHANNEL_ID,
+        autoCancel: true,
+        extra: { sessionId: payload.sessionId },
+    };
+    await LocalNotifications.schedule({ notifications: [schema] });
 }
 
 /** 查询系统通知权限是否已授予（原生）或浏览器 Notification 是否 granted */
@@ -237,7 +303,7 @@ export async function notifyBackgroundMessage(notice: BackgroundMessageNotice): 
     }
 
     await initNativeNotifications();
-    if (appIsActive) return;
+    if (await isAppForeground()) return;
 
     try {
         const perm = await LocalNotifications.checkPermissions();
@@ -258,26 +324,15 @@ export async function notifyBackgroundMessage(notice: BackgroundMessageNotice): 
 
     sessionNotices.set(notice.sessionId, { id, count, title });
 
-    const payload: LocalNotificationSchema = {
-        id,
-        title,
-        body,
-        largeBody: body,
-        summaryText: count > 1 ? `${count} 条新消息` : undefined,
-        smallIcon: "ic_stat_notify",
-        iconColor: "#111827",
-        channelId: CHANNEL_ID,
-        autoCancel: true,
-        extra: { sessionId: notice.sessionId },
-        // 不带 schedule → 插件立刻 NotificationManager.notify（进程仍在时秒出横幅）
-    };
-
     try {
-        // 同一 id 再 schedule 即原地更新（Cap LocalNotifications + setOnlyAlertOnce）
-        // 不再先 remove：清掉再发会丢掉 heads-up 动画，也多一次 bridge 往返
-        await LocalNotifications.schedule({ notifications: [payload] });
+        await postNativeNotification({
+            id,
+            title,
+            body,
+            sessionId: notice.sessionId,
+        });
     } catch (err) {
-        console.warn("[NativeNotifications] schedule failed:", err);
+        console.warn("[NativeNotifications] show failed:", err);
     }
 }
 

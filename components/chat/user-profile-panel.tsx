@@ -162,7 +162,7 @@ function readWebNotificationPermissionHint(): string {
 
 function defaultNotificationHint(): string {
     if (usesNativeSystemNotifications()) {
-        return "后台生成新消息后直接弹出系统横幅，无需先打开 App；前台仍用应用内提醒";
+        return "默认开启。退到后台后，消息一生成就会在通知栏弹横幅；请允许系统通知权限";
     }
     return "网页在后台时用浏览器通知提醒新消息";
 }
@@ -229,17 +229,21 @@ export function UserProfilePanel({ onClose, className }: UserProfilePanelProps) 
         void (async () => {
             const granted = await checkSystemNotificationPermission();
             if (cancelled) return;
-            const enabled = settings.browserNotificationsEnabled === true && granted;
-            setNotifEnabled(enabled);
-            if (settings.browserNotificationsEnabled === true && !granted) {
+            const wanted = usesNativeSystemNotifications()
+                ? settings.browserNotificationsEnabled !== false
+                : settings.browserNotificationsEnabled === true;
+            setNotifEnabled(wanted && granted);
+            if (wanted && !granted) {
                 setNotifHint(usesNativeSystemNotifications()
-                    ? "权限未授予，请重新打开开关或到系统设置允许通知"
+                    ? "还没允许系统通知，通知栏不会弹。请打开开关授权"
                     : readWebNotificationPermissionHint());
-            } else if (!settings.browserNotificationsEnabled) {
-                setNotifHint(defaultNotificationHint());
+            } else if (!wanted) {
+                setNotifHint(usesNativeSystemNotifications()
+                    ? "已关闭系统通知。前台应用内横幅不受影响"
+                    : defaultNotificationHint());
             } else {
                 setNotifHint(usesNativeSystemNotifications()
-                    ? "已开启：后台落库后直接推系统横幅"
+                    ? "已开启：退到后台后，消息生成即弹出通知栏横幅"
                     : readWebNotificationPermissionHint());
             }
             if (isBackgroundKeepAliveSupported()) {

@@ -1,12 +1,16 @@
 package app.floatphone.app;
 
+import android.content.Intent;
 import android.os.Bundle;
 import android.util.Log;
 import android.webkit.RenderProcessGoneDetail;
 import android.webkit.WebView;
 
+import com.getcapacitor.Bridge;
 import com.getcapacitor.BridgeActivity;
 import com.getcapacitor.WebViewListener;
+
+import org.json.JSONObject;
 
 public class MainActivity extends BridgeActivity {
 
@@ -31,6 +35,7 @@ public class MainActivity extends BridgeActivity {
         // 应用自更新：GitHub Release APK 原生下载（断点续传）+ 拉起系统安装器
         registerPlugin(AppUpdaterPlugin.class);
         super.onCreate(savedInstanceState);
+        deliverChatNotificationOpen(getIntent());
         // 免疫系统字体缩放：WebView textZoom 会跟随系统 FONT_SCALE，
         // 大字体会把这台「虚拟手机」的整版 UI 文字放大打乱布局。
         // 应用内有自己的文字缩放设置，不需要系统层再叠一层。
@@ -61,6 +66,30 @@ public class MainActivity extends BridgeActivity {
                     return true;
                 }
             });
+        }
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        deliverChatNotificationOpen(intent);
+    }
+
+    /** 点系统通知回到会话。Bridge 还没好时等下一帧。 */
+    private void deliverChatNotificationOpen(Intent intent) {
+        if (intent == null) return;
+        String sessionId = intent.getStringExtra(ChatMessageNotifier.EXTRA_SESSION_ID);
+        if (sessionId == null || sessionId.isEmpty()) return;
+        intent.removeExtra(ChatMessageNotifier.EXTRA_SESSION_ID);
+        Bridge bridge = getBridge();
+        if (bridge == null) return;
+        try {
+            JSONObject detail = new JSONObject();
+            detail.put("sessionId", sessionId);
+            bridge.triggerWindowJSEvent("ai-notification-open-session", detail.toString());
+        } catch (Exception error) {
+            Log.e("MainActivity", "deliver chat notification open failed", error);
         }
     }
 }

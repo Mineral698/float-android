@@ -65,6 +65,31 @@ public class BackgroundKeepAlivePlugin extends Plugin {
         call.resolve();
     }
 
+    /**
+     * 立刻弹一条聊天系统通知（heads-up）。不依赖保活服务是否在跑。
+     */
+    @PluginMethod
+    public void showChatNotification(PluginCall call) {
+        Context ctx = getContext();
+        if (!ChatMessageNotifier.notificationsEnabled(ctx)) {
+            call.reject("notifications disabled");
+            return;
+        }
+        String title = call.getString("title", "新消息");
+        String body = call.getString("body", "发来一条消息");
+        String sessionId = call.getString("sessionId", "");
+        Integer id = call.getInt("id", 4801);
+        ChatMessageNotifier.show(ctx, id != null ? id : 4801, title, body, sessionId);
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void cancelChatNotification(PluginCall call) {
+        Integer id = call.getInt("id", 0);
+        ChatMessageNotifier.cancel(getContext(), id != null ? id : 0);
+        call.resolve();
+    }
+
     @PluginMethod
     public void status(PluginCall call) {
         call.resolve(statusObject(getContext()));
