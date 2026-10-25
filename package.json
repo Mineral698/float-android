@@ -18,6 +18,7 @@
     "@capacitor/filesystem": "^7.1.8",
     "@capacitor/geolocation": "^7.1.8",
     "@capacitor/ios": "^7.6.9",
+    "@capacitor/local-notifications": "^7.0.7",
     "@gltf-transform/functions": "^4.4.1",
     "@heroicons/react": "^2.2.0",
     "@mdi/js": "^7.4.47",

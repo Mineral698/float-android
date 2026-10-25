@@ -20,8 +20,8 @@ import { generateChatCompletion, generateOfflineChatCompletion, flattenCompletio
 import { formatOfflineTurnXml as formatOfflineTurnXmlShared, buildOfflinePromptHistory as buildOfflinePromptHistoryShared } from "@/lib/offline-prompt-builder";
 import { getStatusRegionConfig, isCustomStatusRegionActive, STATUS_REGION_UPDATED_EVENT } from "@/lib/chat-status-region";
 import { CustomStatusFrame } from "@/components/chat/custom-status-frame";
-import { sendBrowserNotification } from "@/lib/browser-notification";
 import { dispatchChatMessageNotice } from "@/lib/chat-notification-events";
+import { notifyBackgroundMessage } from "@/lib/native-notifications";
 import { shouldSendChatInputOnEnter } from "@/lib/chat-input-keyboard";
 import { useChatBottomReserve } from "./use-chat-bottom-reserve";
 import ReactMarkdown from "react-markdown";
@@ -2985,7 +2985,12 @@ export function ChatRoom({ session, onBack, onDeleted }: ChatRoomProps) {
             dispatchVisibleNotice(msg);
             const body = getNoticeBody(msg);
             if (body) {
-                sendBrowserNotification(charN, { body: body.slice(0, 60), icon: character?.avatar || undefined });
+                void notifyBackgroundMessage({
+                    sessionId: session.id,
+                    title: charN,
+                    body: body.slice(0, 60),
+                    icon: character?.avatar || undefined,
+                });
             }
             const afterPublishResult = entry.afterPublish?.(msg);
             if (afterPublishResult) imageReplacementTasks.push(Promise.resolve(afterPublishResult));

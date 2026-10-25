@@ -284,24 +284,27 @@ export const CHAT_SESSION_CSS_EXAMPLE = `/* ═══ 单独聊天室 CSS 示例
   color: var(--c-text);
 }
 
-/* ── 内心独白 ── */
+/* ── 内心独白（冷灰便利贴，对齐灰阶聊天色） ── */
 .chat-thought-card {
-  background: linear-gradient(135deg, #fef9ef, #fdf3e0);
-  border: 1px solid rgba(222,184,135,0.30);
+  background: linear-gradient(135deg, #f2f2f2, #e8e8e8);
+  border: 1px solid rgba(54,54,54,0.12);
   border-radius: 12px;
 }
 
-.chat-thought-title,
+.chat-thought-title {
+  color: #4d4d4d;
+}
+
 .chat-thought-sig {
-  color: #c9a96e;
+  color: #777777;
 }
 
 .chat-thought-body {
-  color: #5a4a3a;
+  color: #2c3440;
 }
 
 .chat-monologue-heart[data-active] {
-  color: #e74c5e;
+  color: #363636;
 }
 
 /* ── 卡片消息 ── */

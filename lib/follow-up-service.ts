@@ -18,6 +18,7 @@ import {
     createResponseBatchId,
     getLatestCharacterStateValues,
     applyAssistantPartGuards,
+    isProactiveMessagingEnabled,
 } from "./chat-storage";
 import type { ChatMessage, ChatSession, StateValue } from "./chat-storage";
 import { generateChatCompletion, flattenCompletionResult } from "./chat-engine";
@@ -206,6 +207,10 @@ export function startFollowUpService() {
             pollMenstrualPeriodCare(Date.now());
         };
         window.addEventListener("menstrual-period-care-updated", periodCareUpdateHandler);
+        // 原生系统通知：建 channel + 监听点击跳转会话（网页端为 no-op）
+        void import("./native-notifications").then(m => m.initNativeNotifications()).catch(() => undefined);
+        // 常驻保活：按设置启停 + 启动 30s ping（与主动消息总开关无关）
+        void import("./background-keepalive").then(m => m.applyBackgroundKeepAlive()).catch(() => undefined);
     }
 }
 
@@ -395,8 +400,28 @@ async function saveBackgroundCompletionRounds(
     return { hasVisible, newCount, stateValues };
 }
 
+/**
+ * 关闭「允许主动消息」时清空已排期，防止重开后积压齐发。
+ * 不影响保活 ping（ping 在 background-keepalive 独立循环）。
+ */
+export function clearPendingProactiveSchedules(): void {
+    try {
+        for (const sched of loadAllFollowUpSchedules()) {
+            clearFollowUpSchedule(sched.sessionId);
+        }
+        for (const sched of loadTimedWakeSchedules()) {
+            removeTimedWakeSchedule(sched.id);
+        }
+    } catch (e) {
+        console.warn("[FollowUp] clearPendingProactiveSchedules failed:", e);
+    }
+}
+
 function pollSchedules() {
     try {
+        // 总开关：拦所有主动行为出口；用户发消息的回复链路不走这里
+        if (!isProactiveMessagingEnabled()) return;
+
         const schedules = loadAllFollowUpSchedules();
         const now = Date.now();
         // 安静时段：所有"角色主动"类任务（追问/定时唤醒/经期关怀/冷场重连）都暂停，
@@ -1285,7 +1310,20 @@ export async function parseAndSaveResponse(
         const bodyPrefix = isGroup && options?.senderName ? `${options.senderName}: ` : "";
         const partBody = (part: ParsedMessagePart) => bodyPrefix + ((part.content || "").trim()
             || (part.mediaType === "image" && part.mediaData?.label ? `发了一张照片: ${part.mediaData.label}` : "发来一条消息"));
-        const { sendBrowserNotification } = await import("./browser-notification");
+        const { notifyBackgroundMessage } = await import("./native-notifications");
+        const bodies = filteredParts.map(part => partBody(part));
+        const latest = bodies[bodies.length - 1] || "发来一条消息";
+        const systemBody = bodies.length > 1
+            ? `${latest.slice(0, 40)}（${bodies.length} 条新消息）`
+            : latest.slice(0, 60);
+        // 系统通知立刻发。不要塞进 800ms 定时器：退后台后定时器常被推迟到回前台，
+        // 那时会被当成「正在看 App」而取消，通知栏就永远空着。
+        void notifyBackgroundMessage({
+            sessionId,
+            title: charName,
+            body: systemBody,
+            icon: avatar || undefined,
+        });
         filteredParts.forEach((part, index) => {
             bgSetTimeout(() => {
                 dispatchChatMessageNotice({
@@ -1295,7 +1333,6 @@ export async function parseAndSaveResponse(
                     avatar,
                     ...(isGroup ? { isGroup: true } : {}),
                 });
-                sendBrowserNotification(charName, { body: partBody(part).slice(0, 60), icon: avatar || undefined });
             }, index * BACKGROUND_MESSAGE_STAGGER_MS);
         });
     }

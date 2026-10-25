@@ -107,7 +107,7 @@ public class GenerationKeepAliveService extends Service {
                 PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
         String text = label != null && !label.isEmpty() ? label : "正在生成内容…";
         return new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setSmallIcon(android.R.drawable.stat_notify_sync)
+                .setSmallIcon(R.drawable.ic_stat_notify)
                 .setContentTitle(getString(R.string.app_name))
                 .setContentText(text)
                 .setContentIntent(pending)

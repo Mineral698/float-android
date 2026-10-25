@@ -1,3 +1,4 @@
+/// <reference types="@capacitor/local-notifications" />
 import type { CapacitorConfig } from "@capacitor/cli";
 
 const config: CapacitorConfig = {
@@ -14,6 +15,13 @@ const config: CapacitorConfig = {
   },
   server: {
     androidScheme: "https",
+  },
+  plugins: {
+    LocalNotifications: {
+      // res/drawable*/ic_stat_notify.png — 与 GenerationKeepAlive 通知共用状态栏图标
+      smallIcon: "ic_stat_notify",
+      iconColor: "#111827",
+    },
   },
 };
 
